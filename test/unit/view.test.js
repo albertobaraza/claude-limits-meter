@@ -14,7 +14,7 @@ const SNAPSHOT = {
 const view = (state) => statusView(state, COMMANDS, NOW);
 
 test("every state links to the refresh and credentials commands", () => {
-  for (const status of ["loading", "ok", "noCreds", "expired", "error"]) {
+  for (const status of ["loading", "ok", "noCreds", "expired", "rateLimited", "error"]) {
     const { markdown } = view({ status, snapshot: SNAPSHOT, error: "x" });
     assert.match(markdown, /\[Refresh Now\]\(command:ext\.refresh\)/, status);
     assert.match(markdown, /\[Open Credentials File\]\(command:ext\.openCreds\)/, status);
@@ -47,6 +47,26 @@ test("expired explains the way out, names the setting and still shows the last r
   assert.equal(text, "$(sparkle) !");
   assert.match(markdown, new RegExp(`${SETTINGS}\\.refreshExpiredToken`));
   assert.match(markdown, /Session \(5h\)/);
+});
+
+test("rateLimited shows a clock, the last reading, and when the next check can happen", () => {
+  const state = { status: "rateLimited", snapshot: SNAPSHOT, retryAt: NOW + 2 * 60_000 };
+  const { text, markdown } = view(state);
+  assert.equal(text, "$(clock) 42%");
+  assert.match(markdown, /rate limiting requests\. The next check is in 2m; Refresh Now will not ask sooner/);
+  assert.match(markdown, /Session \(5h\)/);
+  assert.equal(view({ status: "rateLimited", retryAt: NOW + 1000 }).text, "$(clock) —", "no reading yet");
+  assert.match(view({ status: "rateLimited", retryAt: NOW - 1 }).markdown, /next check is in now/);
+});
+
+test("the menu says when the rate limit ends, between the usage lines and the actions", () => {
+  const entries = menuEntries({ status: "rateLimited", snapshot: SNAPSHOT, retryAt: NOW + 3 * 60_000 }, NOW);
+  assert.deepEqual(
+    entries.map((e) => e.label),
+    ["$(pulse) Session (5h)", "$(pulse) Weekly (7d)", "$(clock) Rate limited", "", "$(refresh) Refresh Now", "$(key) Open Credentials File"],
+  );
+  assert.equal(entries[2].description, "next check in 3m");
+  assert.equal(entries[2].action, undefined, "informational");
 });
 
 test("error shows the message and the last reading if there is one", () => {

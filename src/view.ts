@@ -2,7 +2,7 @@
 // Free of any `vscode` import, so it is unit-tested with plain node.
 
 import { bar, pctText, timeLeft } from "./claude";
-import type { Snapshot, State } from "./state";
+import { retryAt, type Snapshot, type State } from "./state";
 
 export const SETTINGS = "claudeUsageStatusbar";
 
@@ -37,6 +37,11 @@ export function escapeMarkdown(s: string): string {
   return s.replace(/[\\`*_{}[\]()#+\-.!|<>]/g, "\\$&");
 }
 
+/** "2m" until the time the rate limit lets the next check run, or "now" once it has passed. */
+function retryIn(state: State, now: number): string {
+  return timeLeft(new Date(retryAt(state)).toISOString(), now);
+}
+
 export function statusView(state: State, commands: Commands, now = Date.now()): StatusView {
   let text: string;
   let body: string;
@@ -58,6 +63,12 @@ export function statusView(state: State, commands: Commands, now = Date.now()): 
         `up automatically. To renew it from here instead, enable \`${SETTINGS}.refreshExpiredToken\` ` +
         "(not available for the macOS Keychain).";
       break;
+    case "rateLimited":
+      text = `$(clock) ${state.snapshot ? `${Math.trunc(state.snapshot.fiveHour)}%` : "—"}`;
+      body =
+        `$(clock) Claude is rate limiting requests. The next check is in ${retryIn(state, now)}; ` +
+        "Refresh Now will not ask sooner.";
+      break;
     case "error":
       text = "$(sparkle) ✗";
       body = `$(error) ${escapeMarkdown(state.error ?? "Unknown error")}`;
@@ -69,7 +80,10 @@ export function statusView(state: State, commands: Commands, now = Date.now()): 
   }
 
   let markdown = `**Claude usage**${body ? `\n\n${body}` : ""}`;
-  if (state.snapshot && (state.status === "ok" || state.status === "error" || state.status === "expired")) {
+  if (
+    state.snapshot &&
+    (state.status === "ok" || state.status === "error" || state.status === "expired" || state.status === "rateLimited")
+  ) {
     markdown += `\n\n\`\`\`text\n${usageLines(state.snapshot, now).join("\n")}\n\`\`\``;
   }
   markdown += `\n\n[Refresh Now](command:${commands.refresh}) · [Open Credentials File](command:${commands.openCredentials})`;
@@ -91,6 +105,9 @@ export function menuEntries(state: State, now = Date.now()): MenuEntry[] {
     }
   } else {
     entries.push({ label: "$(pulse) Usage", description: state.status === "noCreds" ? "no credentials" : "—" });
+  }
+  if (state.status === "rateLimited") {
+    entries.push({ label: "$(clock) Rate limited", description: `next check in ${retryIn(state, now)}` });
   }
   entries.push(
     { label: "", separator: true },

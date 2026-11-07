@@ -78,11 +78,41 @@ export type TokenResult =
   /** A login exists but its access token has expired and we may not (or cannot) renew it. */
   | { kind: "expired" };
 
-/** HTTP failure. Carries only the status, never the response body (could echo tokens). */
+/**
+ * HTTP failure. Carries only the status (and the server's retry hint), never the response body (could echo
+ * tokens).
+ */
 export class HttpError extends Error {
-  constructor(readonly status: number, what: string) {
+  constructor(
+    readonly status: number,
+    what: string,
+    /** How long the server asked us to wait (Retry-After), clamped, in milliseconds. */
+    readonly retryAfterMs?: number,
+  ) {
     super(`${what}: HTTP ${status}`);
   }
+}
+
+const RETRY_AFTER_MIN_MS = 5_000;
+const RETRY_AFTER_MAX_MS = 60 * 60_000;
+
+/**
+ * The Retry-After header as milliseconds: either a number of seconds or an HTTP date. Anything else is
+ * `undefined`; a value that is too small or large is clamped, so an odd header can neither make us spin nor
+ * park the bar for a day.
+ */
+export function parseRetryAfter(value: string | null | undefined, now = Date.now()): number | undefined {
+  const v = value?.trim();
+  if (!v) return undefined;
+  let ms: number;
+  if (/^\d+$/.test(v)) {
+    ms = Number(v) * 1000;
+  } else {
+    const date = Date.parse(v);
+    if (Number.isNaN(date)) return undefined;
+    ms = date - now;
+  }
+  return Math.min(Math.max(ms, RETRY_AFTER_MIN_MS), RETRY_AFTER_MAX_MS);
 }
 
 // ── reading credentials ──────────────────────────────────────────────────────
@@ -227,7 +257,7 @@ export class ClaudeClient {
       },
       signal: AbortSignal.timeout(10_000),
     });
-    if (!res.ok) throw new HttpError(res.status, "Usage fetch failed");
+    if (!res.ok) throw new HttpError(res.status, "Usage fetch failed", parseRetryAfter(res.headers.get("retry-after")));
     return (await res.json()) as Usage;
   }
 }

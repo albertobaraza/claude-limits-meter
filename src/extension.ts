@@ -5,7 +5,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { CREDS_PATH, ClaudeClient, defaultOptions, findClientId } from "./claude";
-import { INITIAL_STATE, check, type State } from "./state";
+import { INITIAL_STATE, check, nextPollDelay, refreshAllowedAt, retryAt, type State } from "./state";
 import { SETTINGS, menuEntries, statusView } from "./view";
 
 const CMD_MENU = `${SETTINGS}.showMenu`;
@@ -93,10 +93,19 @@ export function activate(context: vscode.ExtensionContext) {
     timer = setTimeout(async () => {
       if (vscode.window.state.focused) await poll(); // nobody is looking at an unfocused window
       schedule();
-    }, intervalMs());
+    }, nextPollDelay(state, intervalMs())); // longer than the interval while Claude is rate limiting us
   }
 
   async function refreshNow() {
+    // Clicking Refresh over and over must not hammer the API (it answers 429): within the minimum gap, or
+    // while rate limited, show what we have and say when the next real check can happen.
+    const waitMs = refreshAllowedAt(state, lastPollAt) - Date.now();
+    if (waitMs > 0) {
+      logLine(`Refresh skipped: the next request may be sent in ${Math.ceil(waitMs / 1000)}s`);
+      vscode.window.setStatusBarMessage(`Claude Limits Meter: next check in ${Math.ceil(waitMs / 1000)}s`, 3000);
+      render();
+      return;
+    }
     item.text = "$(sync~spin) …";
     await poll();
     schedule();
@@ -133,7 +142,8 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand(CMD_OPEN_CREDS, openCredentials),
     vscode.window.onDidChangeWindowState((s) => {
       // catch up right away when the window comes back after skipped polls
-      if (s.focused && Date.now() - lastPollAt >= intervalMs()) void poll().then(schedule);
+      const now = Date.now();
+      if (s.focused && now - lastPollAt >= intervalMs() && now >= retryAt(state)) void poll().then(schedule);
     }),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration(`${SETTINGS}.pollIntervalSeconds`)) schedule();
