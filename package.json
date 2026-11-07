@@ -74,7 +74,9 @@
   "scripts": {
     "compile": "tsc -p .",
     "watch": "tsc -watch -p .",
-    "test": "npm run compile && node --test test/",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run test:unit",
+    "test:unit": "npm run compile && node --test test/unit/",
     "package": "npm run compile && vsce package --no-dependencies"
   },
   "devDependencies": {

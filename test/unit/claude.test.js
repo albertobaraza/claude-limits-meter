@@ -6,7 +6,7 @@ const fs = require("node:fs");
 const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
-const c = require("../out/claude.js");
+const c = require("../../out/claude.js");
 
 const NOW = 1_800_000_000_000;
 const isWindows = process.platform === "win32";
