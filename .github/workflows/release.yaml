@@ -6,8 +6,9 @@ name: Release
 # pull request that bumped it.
 #
 # Publishing the same .vsix to the VS Code Marketplace is a second, opt-in job: it runs only when
-# the repository variable PUBLISH_TO_MARKETPLACE is "true" and has the VSCE_PAT secret (a Marketplace
-# "Manage" token, docs/RELEASING.md). Run this workflow by hand on main to retry a failed publish.
+# the repository variable PUBLISH_TO_MARKETPLACE is "true". It signs in with Marketplace trusted
+# publishing (OIDC): no token is stored, but the publisher needs a policy for this workflow file
+# (docs/RELEASING.md). Run this workflow by hand on main to retry a failed publish.
 on:
   push:
     branches:
@@ -87,9 +88,9 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+      id-token: write # lets vsce ask GitHub for the OIDC token the Marketplace trusts
     env:
       VERSION: ${{ needs.release.outputs.version }}
-      VSCE_PAT: ${{ secrets.VSCE_PAT }}
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
 
@@ -100,13 +101,6 @@ jobs:
         with:
           node-version: 24
           cache: npm
-
-      - name: Check the token is there
-        run: |
-          if [ -z "${VSCE_PAT}" ]; then
-            echo "::error::PUBLISH_TO_MARKETPLACE is true but the VSCE_PAT secret is not set (docs/RELEASING.md)"
-            exit 1
-          fi
 
       # The file the Marketplace gets is the one the GitHub release holds, not a second build of it.
       - name: Download the .vsix of the release
@@ -125,5 +119,5 @@ jobs:
           if [ "${published}" = "${VERSION}" ]; then
             echo "${id} ${VERSION} is already on the Marketplace: nothing to do."
           else
-            npx vsce publish --packagePath dist/*.vsix
+            npx vsce publish --oidc --packagePath dist/*.vsix
           fi

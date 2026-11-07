@@ -93,7 +93,8 @@ it instead of improvising. Never add a `Co-Authored-By` trailer.
   the workflows; and a Gitleaks scan of the full history.
 - `.github/workflows/release.yaml`: on push to `main`, runs `test.yaml`, then cuts `vX.Y.Z` as a GitHub release (changelog
   section as notes, `.vsix` attached) if that version has none. Publishing to the Marketplace is a second job that runs
-  only when the `PUBLISH_TO_MARKETPLACE` variable is `true` and the `VSCE_PAT` secret exists (`docs/RELEASING.md`).
+  only when the `PUBLISH_TO_MARKETPLACE` variable is `true`; it signs in with the publisher's trusted-publishing policy
+  (OIDC, `vsce publish --oidc`), so there is no token secret (`docs/RELEASING.md`).
 - `.github/dependabot.yml`: one weekly PR covering npm and the workflow actions.
 
 Use the `changelog` skill to bump the version and add the entry before merging to `main`: both the CI check and the

@@ -1,7 +1,7 @@
 ---
 name: release
 description: "Report where a release stands after a merge to main: the release workflow's run, the GitHub release and its .vsix, and the Marketplace listing, and say what to do about anything missing. USE FOR: did the release go out, is it published, release status, why wasn't it released, check the Marketplace, what version is live. DO NOT USE FOR: preparing a release (see the changelog skill), publishing (the user does that), or CI on a branch (see the ci skill)."
-allowed-tools: Bash(gh run *) Bash(gh release *) Bash(gh variable list) Bash(gh secret list) Bash(gh auth *) Bash(git tag *) Bash(git log *) Bash(npx vsce show *) Bash(node scripts/release-metadata.js *) Read
+allowed-tools: Bash(gh run *) Bash(gh release *) Bash(gh variable list) Bash(gh auth *) Bash(git tag *) Bash(git log *) Bash(npx vsce show *) Bash(node scripts/release-metadata.js *) Read
 ---
 
 # Release Skill
@@ -45,13 +45,13 @@ It should hold `claude-usage-statusbar-<version>.vsix`, and its notes should equ
 
 ```bash
 gh variable list
-gh secret list
 ```
 
 - `PUBLISH_TO_MARKETPLACE` is not `true`: publishing is off (the default). Say so; it is the user's choice to turn on.
-- It is `true` and `VSCE_PAT` is listed: check the live version with `npx vsce show <publisher>.<name> --json` (the `versions[0].version`).
-  If it is behind the release, the publish job failed or hasn't run: `gh run view <id> --log-failed`, then the user can retry with
-  `gh workflow run release.yaml`. A `401`/`403` in the log is an expired or wrongly scoped token (`docs/RELEASING.md` has the scopes).
+- It is `true`: check the live version with `npx vsce show <publisher>.<name> --json` (the `versions[0].version`; `undefined`
+  means nothing is published yet). If it is behind the release, the publish job failed or hasn't run: `gh run view <id> --log-failed`,
+  then the user can retry with `gh workflow run release.yaml`. An error from the OIDC token exchange means the publisher's trusted
+  publishing policy is missing or does not match this repository and `release.yaml` (`docs/RELEASING.md` has the fields).
 
 ### Step 5: Report
 

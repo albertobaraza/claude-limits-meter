@@ -19,17 +19,18 @@ release, so the workflow stops after the tests.
 
 ## Publishing to the VS Code Marketplace
 
-Off until you opt in, because it publishes to the world and needs a secret only you can create.
+Off until you opt in, because it publishes to the world. It uses the Marketplace's *trusted publishing*: the workflow
+proves to the Marketplace that it is this repository's `release.yaml` (an OIDC token from GitHub), so there is no
+token to create, store or renew.
 
 1. **Publisher.** The `publisher` in `package.json` (`albertobaraza`) must be one you own at
    <https://marketplace.visualstudio.com/manage>.
-2. **Token.** In Azure DevOps (<https://dev.azure.com>) open *User settings > Personal access tokens > New Token*:
-   Organization *All accessible organizations*, Scopes *Custom defined* > *Marketplace* > **Manage**. Copy it once; it
-   is shown once and expires (a year at most), so note the date to renew it.
-3. **Store it** as a repository secret and switch publishing on:
+2. **Policy.** On that publisher open the *Trusted Publishing* tab > *Create*: Provider *GitHub Actions*, Repository
+   owner `albertobaraza`, Repository `claude-usage-statusbar`, Workflow `release.yaml` (the file holding the `publish`
+   job), Environment empty. If you fill the environment in, the `publish` job must declare the same `environment:`.
+3. **Switch publishing on:**
 
    ```bash
-   gh secret set VSCE_PAT                       # paste the token when asked
    gh variable set PUBLISH_TO_MARKETPLACE --body true
    ```
 
