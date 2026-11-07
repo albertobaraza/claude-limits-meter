@@ -1,0 +1,47 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-json
+        exclude: ^\.vscode/ # JSON with comments
+      - id: check-merge-conflict
+      - id: check-added-large-files
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: no-commit-to-branch
+        description: Prevents commits directly to main.
+        args: ["--branch", "main"]
+  - repo: local
+    hooks:
+      - id: commit-message
+        name: commit message
+        description: 'One-liner "<type>: <description>", never a Co-Authored-By trailer (CONTRIBUTING.md).'
+        entry: node scripts/check-commit-message.js
+        language: system
+        stages: [commit-msg]
+      - id: no-push-to-main
+        name: no push to main
+        description: Refuses a push whose destination is main, whatever branch it comes from; main is reached by merging a pull request.
+        entry: |-
+          bash -c 'test "${PRE_COMMIT_REMOTE_BRANCH:-}" != refs/heads/main || { echo "Pushing to main is blocked: push your branch and open a pull request."; exit 1; }'
+        language: system
+        always_run: true
+        fail_fast: true
+        pass_filenames: false
+        stages: [pre-push]
+      - id: typecheck
+        name: typecheck
+        entry: npm run typecheck
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+      # The suite runs in about a second, so unlike a big app this runs all of it on push; CI runs it again on three systems.
+      - id: tests
+        name: unit tests
+        entry: npm run test:unit
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]

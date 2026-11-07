@@ -1,0 +1,123 @@
+name: Release
+
+# On a push to main: run the test workflow, then, if package.json names a version that has no GitHub
+# release yet, build the .vsix and publish the release (tag vX.Y.Z, the matching CHANGELOG.md section
+# as its notes, the .vsix attached). Nothing to trigger by hand: a version is released by merging the
+# pull request that bumped it.
+#
+# Publishing the same .vsix to the VS Code Marketplace is a second, opt-in job: it runs only when
+# the repository variable PUBLISH_TO_MARKETPLACE is "true". It signs in with Marketplace trusted
+# publishing (OIDC): no token is stored, but the publisher needs a policy for this workflow file
+# (docs/RELEASING.md). Run this workflow by hand on main to retry a failed publish.
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/test.yaml
+
+  release:
+    name: GitHub release
+    needs: test
+    if: github.repository == 'albertobaraza/claude-usage-statusbar'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Read the version and check it against the changelog
+        id: meta
+        run: |
+          node scripts/release-metadata.js check-changelog
+          version="$(node scripts/release-metadata.js version)"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          if gh release view "v${version}" > /dev/null 2>&1; then
+            echo "Release v${version} already exists: nothing to do."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      # No install scripts: this job holds a token that can write to the repository.
+      - name: Build the .vsix
+        if: steps.meta.outputs.exists == 'false'
+        run: |
+          npm ci --ignore-scripts
+          npm run package
+
+      - name: Publish the GitHub release
+        if: steps.meta.outputs.exists == 'false'
+        run: |
+          node scripts/release-metadata.js notes "${VERSION}" > "${RUNNER_TEMP}/notes.md"
+          gh release create "v${VERSION}" "claude-usage-statusbar-${VERSION}.vsix" \
+            --target "${GITHUB_SHA}" \
+            --title "v${VERSION}" \
+            --notes-file "${RUNNER_TEMP}/notes.md" \
+            --latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.meta.outputs.version }}
+
+  publish:
+    name: VS Code Marketplace
+    needs: release
+    if: vars.PUBLISH_TO_MARKETPLACE == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write # lets vsce ask GitHub for the OIDC token the Marketplace trusts
+    env:
+      VERSION: ${{ needs.release.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      # The file the Marketplace gets is the one the GitHub release holds, not a second build of it.
+      - name: Download the .vsix of the release
+        run: gh release download "v${VERSION}" --pattern '*.vsix' --dir dist
+
+      - name: Install vsce
+        run: npm ci --ignore-scripts
+
+      - name: Publish unless this version is already there
+        run: |
+          id="$(node -p "const p = require('./package.json'); p.publisher + '.' + p.name")"
+          published="$(npx vsce show "${id}" --json 2> /dev/null | node -e "
+            let s = ''; process.stdin.on('data', (d) => (s += d)).on('end', () => {
+              try { console.log(JSON.parse(s).versions[0].version); } catch { console.log(''); }
+            });")"
+          if [ "${published}" = "${VERSION}" ]; then
+            echo "${id} ${VERSION} is already on the Marketplace: nothing to do."
+          else
+            npx vsce publish --oidc --packagePath dist/*.vsix
+          fi

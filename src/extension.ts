@@ -1,30 +1,16 @@
+// The VS Code side: a status-bar item, a timer, the commands and the settings. What is shown
+// is decided in state.ts / view.ts and the credentials and API in claude.ts, all testable without VS Code.
+
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import {
-  CREDS_PATH,
-  ClaudeClient,
-  HttpError,
-  bar,
-  defaultOptions,
-  findClientId,
-  pctText,
-  timeLeft,
-} from "./claude";
+import { CREDS_PATH, ClaudeClient, defaultOptions, findClientId } from "./claude";
+import { INITIAL_STATE, check, type State } from "./state";
+import { SETTINGS, menuEntries, statusView } from "./view";
 
-const CFG = "claudeUsageStatusbar";
-const CMD_MENU = `${CFG}.showMenu`;
-const CMD_REFRESH = `${CFG}.refresh`;
-const CMD_OPEN_CREDS = `${CFG}.openCredentials`;
-
-interface Snapshot {
-  fiveHour: number;
-  fiveHourReset?: string | null;
-  sevenDay: number;
-  sevenDayReset?: string | null;
-}
-
-type Status = "loading" | "ok" | "noCreds" | "expired" | "error";
+const CMD_MENU = `${SETTINGS}.showMenu`;
+const CMD_REFRESH = `${SETTINGS}.refresh`;
+const CMD_OPEN_CREDS = `${SETTINGS}.openCredentials`;
 
 export function activate(context: vscode.ExtensionContext) {
   const log = vscode.window.createOutputChannel("Claude Usage Status Bar");
@@ -32,15 +18,14 @@ export function activate(context: vscode.ExtensionContext) {
   item.name = "Claude Usage";
   item.command = CMD_MENU;
 
-  let status: Status = "loading";
-  let snapshot: Snapshot | undefined; // last successful reading, kept across errors
-  let errorMessage = "";
+  let state: State = INITIAL_STATE;
   let inFlight: Promise<void> | undefined;
   let lastPollAt = 0;
   let timer: NodeJS.Timeout | undefined;
 
-  const cfg = () => vscode.workspace.getConfiguration(CFG);
+  const cfg = () => vscode.workspace.getConfiguration(SETTINGS);
   const intervalMs = () => Math.max(15, cfg().get<number>("pollIntervalSeconds", 60)) * 1000;
+  const logLine = (message: string) => log.appendLine(`${new Date().toISOString()} ${message}`);
 
   // ── client id (only needed when refreshing an expired token is switched on) ──
   async function resolveClientId(): Promise<string> {
@@ -64,7 +49,7 @@ export function activate(context: vscode.ExtensionContext) {
     if (!id) {
       throw new Error(
         "Claude Code extension not found, so the OAuth client id is unknown. " +
-          `Install anthropic.claude-code or set ${CFG}.clientId.`,
+          `Install anthropic.claude-code or set ${SETTINGS}.clientId.`,
       );
     }
     return id;
@@ -76,92 +61,28 @@ export function activate(context: vscode.ExtensionContext) {
       refreshEnabled: () => cfg().get<boolean>("refreshExpiredToken", false),
       clientId: resolveClientId,
       onWarn: (message) => {
-        log.appendLine(`${new Date().toISOString()} ${message}`);
+        logLine(message);
         void vscode.window.showWarningMessage(`Claude Usage: ${message}`);
       },
     }),
   );
 
   // ── rendering ──
-  function lines(s: Snapshot) {
-    return [
-      `Session (5h)  ${bar(s.fiveHour)} ${pctText(s.fiveHour)}   ⏱ ${timeLeft(s.fiveHourReset)}`,
-      `Weekly  (7d)  ${bar(s.sevenDay)} ${pctText(s.sevenDay)}   ⏱ ${timeLeft(s.sevenDayReset)}`,
-    ];
-  }
-
   function render() {
-    const md = new vscode.MarkdownString(undefined, true);
-    md.isTrusted = { enabledCommands: [CMD_REFRESH, CMD_OPEN_CREDS] };
-
-    switch (status) {
-      case "loading":
-        item.text = "$(sparkle) …";
-        md.appendMarkdown("**Claude usage**\n\nLoading…");
-        break;
-      case "noCreds":
-        item.text = "$(sparkle) —";
-        md.appendMarkdown(
-          "**Claude usage**\n\nNo Claude Code login found on this machine. Sign in to Claude Code first " +
-            "(run `claude` in a terminal and authenticate).",
-        );
-        break;
-      case "expired":
-        item.text = "$(sparkle) !";
-        md.appendMarkdown(
-          "**Claude usage**\n\nThe stored Claude token has expired. It renews the next time Claude Code " +
-            `is used, and this bar picks it up automatically. To renew it from here instead, enable \`${CFG}.refreshExpiredToken\` ` +
-            "(not available for the macOS Keychain).",
-        );
-        break;
-      case "error":
-        item.text = "$(sparkle) ✗";
-        md.appendMarkdown(`**Claude usage**\n\n$(error) ${escapeMd(errorMessage)}`);
-        break;
-      case "ok":
-        item.text = `$(sparkle) ${Math.trunc(snapshot!.fiveHour)}%`;
-        md.appendMarkdown("**Claude usage**");
-        break;
-    }
-    if (snapshot && (status === "ok" || status === "error" || status === "expired")) {
-      md.appendMarkdown("\n\n").appendCodeblock(lines(snapshot).join("\n"), "text");
-    }
-    md.appendMarkdown(`\n\n[Refresh Now](command:${CMD_REFRESH}) · [Open Credentials File](command:${CMD_OPEN_CREDS})`);
-    item.tooltip = md;
+    const view = statusView(state, { refresh: CMD_REFRESH, openCredentials: CMD_OPEN_CREDS });
+    const tooltip = new vscode.MarkdownString(view.markdown, true);
+    tooltip.isTrusted = { enabledCommands: [CMD_REFRESH, CMD_OPEN_CREDS] };
+    item.text = view.text;
+    item.tooltip = tooltip;
   }
 
   // ── polling ──
-  async function doPoll() {
-    lastPollAt = Date.now();
-    try {
-      const result = await client.getToken();
-      if (result.kind !== "ok") {
-        status = result.kind === "none" ? "noCreds" : "expired";
-        return;
-      }
-      const data = await client.fetchUsage(result.token);
-      snapshot = {
-        fiveHour: data.five_hour?.utilization ?? 0,
-        fiveHourReset: data.five_hour?.resets_at,
-        sevenDay: data.seven_day?.utilization ?? 0,
-        sevenDayReset: data.seven_day?.resets_at,
-      };
-      status = "ok";
-    } catch (e) {
-      if (e instanceof HttpError && e.status === 401) {
-        status = "expired"; // Claude rejected a token that looked valid
-      } else {
-        status = "error";
-        errorMessage = e instanceof Error ? e.message : String(e);
-      }
-      log.appendLine(`${new Date().toISOString()} ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      render();
-    }
-  }
-
   function poll(): Promise<void> {
-    inFlight ??= doPoll().finally(() => {
+    inFlight ??= (async () => {
+      lastPollAt = Date.now();
+      state = await check(client, state, logLine);
+      render();
+    })().finally(() => {
       inFlight = undefined;
     });
     return inFlight;
@@ -191,28 +112,15 @@ export function activate(context: vscode.ExtensionContext) {
   }
 
   async function showMenu() {
-    type Entry = vscode.QuickPickItem & { run?: () => unknown };
-    const entries: Entry[] = [];
-    if (snapshot) {
-      const windows = [
-        { label: "Session (5h)", pct: snapshot.fiveHour, reset: snapshot.fiveHourReset },
-        { label: "Weekly (7d)", pct: snapshot.sevenDay, reset: snapshot.sevenDayReset },
-      ];
-      for (const w of windows) {
-        entries.push({
-          label: `$(pulse) ${w.label}`,
-          description: `${bar(w.pct)} ${pctText(w.pct).trim()}   ⏱ ${timeLeft(w.reset)}`,
-        });
-      }
-    } else {
-      entries.push({ label: "$(pulse) Usage", description: status === "noCreds" ? "no credentials" : "—" });
-    }
-    entries.push(
-      { label: "", kind: vscode.QuickPickItemKind.Separator },
-      { label: "$(refresh) Refresh Now", run: refreshNow },
-      { label: "$(key) Open Credentials File", run: openCredentials },
-    );
-    const picked = await vscode.window.showQuickPick(entries, { title: "Claude Usage", placeHolder: "Claude usage" });
+    const actions = { refresh: refreshNow, openCredentials };
+    type Item = vscode.QuickPickItem & { run?: () => unknown };
+    const items: Item[] = menuEntries(state).map((e) => ({
+      label: e.label,
+      description: e.description,
+      kind: e.separator ? vscode.QuickPickItemKind.Separator : vscode.QuickPickItemKind.Default,
+      run: e.action && actions[e.action],
+    }));
+    const picked = await vscode.window.showQuickPick(items, { title: "Claude Usage", placeHolder: "Claude usage" });
     await picked?.run?.();
   }
 
@@ -228,8 +136,8 @@ export function activate(context: vscode.ExtensionContext) {
       if (s.focused && Date.now() - lastPollAt >= intervalMs()) void poll().then(schedule);
     }),
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration(`${CFG}.pollIntervalSeconds`)) schedule();
-      if (e.affectsConfiguration(`${CFG}.refreshExpiredToken`)) void refreshNow();
+      if (e.affectsConfiguration(`${SETTINGS}.pollIntervalSeconds`)) schedule();
+      if (e.affectsConfiguration(`${SETTINGS}.refreshExpiredToken`)) void refreshNow();
     }),
   );
 
@@ -239,7 +147,3 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {}
-
-function escapeMd(s: string): string {
-  return s.replace(/[\\`*_{}[\]()#+\-.!|<>]/g, "\\$&");
-}

@@ -1,39 +1,125 @@
 name: CI
 
+# What a pull request has to satisfy besides the tests (test.yaml): the release metadata, the commit
+# convention, file hygiene, the workflows themselves and a scan for secrets.
 on:
-  push:
-    branches: [main]
   pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
 
 jobs:
-  test:
-    name: test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - run: npm test
-
-  package:
+  changelog:
+    name: Changelog & version
     runs-on: ubuntu-latest
-    needs: test
+    timeout-minutes: 5
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
         with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - run: npm run package
-      - uses: actions/upload-artifact@v4
+          # The tags say which versions are already released; the history says what this PR changes.
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/setup-node@v7
         with:
-          name: vsix
-          path: "*.vsix"
+          node-version: 24
+
+      - name: package.json's version is the top CHANGELOG.md entry
+        run: node scripts/release-metadata.js check-changelog
+
+      # A change that ships (src/, package.json) needs a version no release has used, and an entry for it.
+      # Dependabot's bumps are not a release of their own: they ride along with the next one.
+      - name: A change to what ships has an unreleased version and a changelog entry
+        if: github.actor != 'dependabot[bot]'
+        run: node scripts/release-metadata.js check-unreleased "origin/${BASE_REF}"
+        env:
+          BASE_REF: ${{ github.base_ref }}
+
+  commits:
+    name: Commit messages
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: 'Every commit is a "<type>: <description>" one-liner with no Co-Authored-By'
+        run: node scripts/check-commit-message.js --range "${BASE_SHA}..${HEAD_SHA}"
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+
+  hygiene:
+    name: File hygiene
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # The commit-stage hooks of .pre-commit-config.yaml over every file: YAML and JSON syntax, merge
+      # markers, big files, final newlines and trailing whitespace. no-commit-to-branch is about a
+      # developer's checkout, not a PR's, and the push-stage hooks are what the test workflows run.
+      - name: Run pre-commit
+        run: pipx run --spec pre-commit==4.7.0 pre-commit run --all-files --show-diff-on-failure
+        env:
+          SKIP: no-commit-to-branch
+
+  workflows:
+    name: Workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # actionlint reads the workflows the way GitHub does and catches a mistyped expression, an unknown
+      # input or an unquoted shell variable before a run has to. The binary must be the exact file whose
+      # SHA-256 is written here; a new version is a new number and a new hash from that release's
+      # actionlint_<version>_checksums.txt.
+      - name: Install actionlint
+        env:
+          ACTIONLINT_VERSION: 1.7.12
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          set -euo pipefail
+          file="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          cd "$(mktemp -d)"
+          curl -fsSL --retry 3 -O "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${file}"
+          echo "${ACTIONLINT_SHA256}  ${file}" | sha256sum -c -
+          tar -xzf "${file}" actionlint
+          sudo install actionlint /usr/local/bin/actionlint
+
+      - name: Lint the workflows
+        run: actionlint -color
+
+  # Gitleaks through its Docker image rather than a marketplace action. This repository handles the
+  # shape of Claude Code's login, so a pasted token is the mistake worth catching.
+  secrets:
+    name: Secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Full history, not just the merge commit, so a secret committed and then
+          # reverted within the same PR is still caught.
+          fetch-depth: 0
+
+      # Pinned by digest as well as by tag, so a tag moved on Docker Hub cannot change what scans the repo. Dependabot
+      # does not read a `docker run` line: to move to a newer release, change the tag and the digest together
+      # (`docker buildx imagetools inspect zricethezav/gitleaks:<tag>` prints the digest).
+      - name: Scan for secrets
+        run: |
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f \
+            git /repo --verbose --redact --no-banner
