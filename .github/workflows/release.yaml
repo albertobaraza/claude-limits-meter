@@ -71,7 +71,7 @@ jobs:
         if: steps.meta.outputs.exists == 'false'
         run: |
           node scripts/release-metadata.js notes "${VERSION}" > "${RUNNER_TEMP}/notes.md"
-          gh release create "v${VERSION}" "claude-usage-statusbar-${VERSION}.vsix" \
+          gh release create "v${VERSION}" ./*.vsix \
             --target "${GITHUB_SHA}" \
             --title "v${VERSION}" \
             --notes-file "${RUNNER_TEMP}/notes.md" \
