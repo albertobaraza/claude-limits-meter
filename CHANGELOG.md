@@ -4,6 +4,13 @@ All notable changes to this extension are documented here, following
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-11-07
+
+### Fixed
+
+- Clicking Refresh Now several times no longer ends in `HTTP 429` errors: it asks Claude at most once every 10 seconds and shows the reading it already has in between.
+- When Claude does rate limit the bar, the item shows a clock with the last reading and the tooltip says when the next check happens. It waits as long as Claude asks (or 2 minutes, doubling up to 30) before trying again, instead of retrying every minute.
+
 ## [0.1.1] - 2026-11-07
 
 ### Changed
