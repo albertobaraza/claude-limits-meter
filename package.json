@@ -1,0 +1,86 @@
+{
+  "name": "claude-usage-statusbar",
+  "displayName": "Claude Usage Status Bar",
+  "description": "Unofficial: shows your Claude Code usage (5-hour session and 7-day weekly limits) in the VS Code status bar. Works on Linux, macOS, Windows, WSL and remote hosts.",
+  "version": "0.1.0",
+  "publisher": "albertobaraza",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/albertobaraza/claude-usage-statusbar.git"
+  },
+  "bugs": {
+    "url": "https://github.com/albertobaraza/claude-usage-statusbar/issues"
+  },
+  "homepage": "https://github.com/albertobaraza/claude-usage-statusbar#readme",
+  "keywords": [
+    "claude",
+    "claude code",
+    "usage",
+    "rate limit",
+    "status bar",
+    "anthropic"
+  ],
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "claudeUsageStatusbar.showMenu",
+        "title": "Claude Usage: Show Menu"
+      },
+      {
+        "command": "claudeUsageStatusbar.refresh",
+        "title": "Claude Usage: Refresh Now"
+      },
+      {
+        "command": "claudeUsageStatusbar.openCredentials",
+        "title": "Claude Usage: Open Credentials File"
+      }
+    ],
+    "configuration": {
+      "title": "Claude Usage Status Bar",
+      "properties": {
+        "claudeUsageStatusbar.pollIntervalSeconds": {
+          "type": "number",
+          "default": 60,
+          "minimum": 15,
+          "description": "Seconds between usage checks. Checks are skipped while the VS Code window is unfocused."
+        },
+        "claudeUsageStatusbar.refreshExpiredToken": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Renew an expired Claude token from this extension instead of waiting for Claude Code to do it. Uses Claude Code's OAuth client id and writes the renewed login back to `~/.claude/.credentials.json`. Refresh tokens rotate, so if the write-back fails Claude Code may need you to sign in again. Not available for a login stored in the macOS Keychain (the extension never writes to it)."
+        },
+        "claudeUsageStatusbar.clientId": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "OAuth client id used when `#claudeUsageStatusbar.refreshExpiredToken#` is on. Leave empty to detect it from the installed Claude Code extension."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "test": "npm run compile && node --test test/",
+    "package": "npm run compile && vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.130",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^4.1.0",
+    "typescript": "^7.0.2"
+  }
+}
