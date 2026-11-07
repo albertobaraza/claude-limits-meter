@@ -279,8 +279,38 @@ test("fetchUsage sends the expected headers and parses the body", async () => {
 test("fetchUsage surfaces HTTP errors by status", async () => {
   const srv = await mockServer({ "/usage": json({}, 429) });
   const { client } = makeClient("unused", srv.base);
-  await assert.rejects(client.fetchUsage("TOK"), (e) => e instanceof c.HttpError && e.status === 429);
+  await assert.rejects(client.fetchUsage("TOK"), (e) => e instanceof c.HttpError && e.status === 429 && e.retryAfterMs === undefined);
   srv.close();
+});
+
+test("a 429 carries the server's Retry-After, and never its body", async () => {
+  const srv = await mockServer({
+    "/usage": (_, res) => {
+      res.statusCode = 429;
+      res.setHeader("retry-after", "90");
+      res.end("secret-body");
+    },
+  });
+  const { client } = makeClient("unused", srv.base);
+  await assert.rejects(client.fetchUsage("TOK"), (e) => {
+    assert.ok(e instanceof c.HttpError);
+    assert.equal(e.status, 429);
+    assert.equal(e.retryAfterMs, 90_000);
+    assert.ok(!e.message.includes("secret-body"));
+    return true;
+  });
+  srv.close();
+});
+
+test("parseRetryAfter reads seconds or an HTTP date, clamps them, and ignores anything else", () => {
+  const now = Date.parse("2026-01-01T00:00:00Z");
+  assert.equal(c.parseRetryAfter("90", now), 90_000);
+  assert.equal(c.parseRetryAfter(" 30 ", now), 30_000);
+  assert.equal(c.parseRetryAfter("Thu, 01 Jan 2026 00:03:00 GMT", now), 180_000);
+  assert.equal(c.parseRetryAfter("0", now), 5_000, "never a tight loop");
+  assert.equal(c.parseRetryAfter("Wed, 31 Dec 2025 23:00:00 GMT", now), 5_000, "a date in the past");
+  assert.equal(c.parseRetryAfter("999999", now), 3_600_000, "never parks the bar for hours");
+  for (const bad of [undefined, null, "", "soon"]) assert.equal(c.parseRetryAfter(bad, now), undefined, String(bad));
 });
 
 test("findClientId reads CLIENT_ID from the first extension dir that has it", async () => {
