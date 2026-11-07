@@ -80,7 +80,8 @@
     "test:coverage": "npm run compile && node --test --experimental-test-coverage --test-coverage-include=\"out/**\" --test-coverage-exclude=\"out/extension.js\" --test-coverage-lines=90 --test-coverage-branches=85 --test-coverage-functions=80 test/unit/",
     "test:integration": "npm run compile && node test/integration/run.js",
     "test:package": "npm run compile && node scripts/check-package.js",
-    "package": "npm run compile && vsce package --no-dependencies"
+    "package": "npm run compile && vsce package --no-dependencies",
+    "smoke": "npm run compile && node scripts/smoke.js"
   },
   "devDependencies": {
     "@types/node": "^18.19.130",
