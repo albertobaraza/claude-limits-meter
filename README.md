@@ -84,9 +84,11 @@ Contributions go through pull requests (nothing is pushed to `main`); [CONTRIBUT
 commit and changelog conventions, [docs/RELEASING.md](docs/RELEASING.md) how releases are made, and
 [SECURITY.md](SECURITY.md) how to report a vulnerability.
 
-## Related projects
+## Acknowledgements
 
-[Claude Usage Bar](https://github.com/Harsh1210/claude-usage-bar) by Harsh Agarwal (MIT) covers similar ground with a different approach: it listens to Claude Code's own usage requests instead of polling, and adds colour alerts and model/context display. Its source helped confirm where Claude Code keeps its login on each platform.
+Thanks to [Claude Usage Bar](https://github.com/Harsh1210/claude-usage-bar) by Harsh Agarwal (MIT). Reading its source helped us confirm where Claude Code keeps its login on each platform, which this extension depends on.
+
+It covers similar ground with a different approach: it listens to Claude Code's own usage requests instead of polling, and adds colour alerts and model/context display. If you want those, it is worth a look.
 
 ## License
 
