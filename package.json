@@ -84,7 +84,7 @@
     "smoke": "npm run compile && node scripts/smoke.js"
   },
   "devDependencies": {
-    "@types/node": "^18.19.130",
+    "@types/node": "^26.6.6",
     "@types/vscode": "^1.85.0",
     "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^4.1.0",
