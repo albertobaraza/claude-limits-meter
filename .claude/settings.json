@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(git push:*)",
+      "Bash(git -C * push:*)",
+      "Bash(gh pr merge:*)",
+      "Bash(npm publish:*)",
+      "Bash(npx vsce publish:*)",
+      "Bash(npx @vscode/vsce publish:*)",
+      "Bash(vsce publish:*)",
+      "Read(./.env)",
+      "Grep(./.env)"
+    ]
+  }
+}
