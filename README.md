@@ -1,4 +1,4 @@
-# Claude Usage Status Bar
+# Claude Limits Meter
 
 Shows your [Claude Code](https://code.claude.com) usage limits, the **5-hour session** and the **7-day weekly** window, in the VS Code status bar.
 
@@ -35,8 +35,8 @@ Not on the Marketplace yet. Build and install the `.vsix` yourself:
 git clone https://github.com/albertobaraza/claude-usage-statusbar.git
 cd claude-usage-statusbar
 npm ci
-npm run package                 # produces claude-usage-statusbar-<version>.vsix
-code --install-extension claude-usage-statusbar-*.vsix
+npm run package                 # produces claude-limits-meter-<version>.vsix
+code --install-extension claude-limits-meter-*.vsix
 ```
 
 ## When the token expires
