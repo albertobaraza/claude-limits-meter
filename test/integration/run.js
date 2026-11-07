@@ -38,6 +38,9 @@ async function main() {
         path.join(scratch, "user-data"),
         "--extensions-dir",
         path.join(scratch, "extensions"),
+        // The throwaway HOME has no login keychain, and on macOS Electron may then wait on a Keychain
+        // prompt nobody can answer (the CI run hung there). The mock keychain keeps it off the real one.
+        ...(process.platform === "darwin" ? ["--use-mock-keychain"] : []),
       ],
     });
   } finally {
