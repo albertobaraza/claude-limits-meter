@@ -9,7 +9,7 @@ const { ClaudeClient, defaultOptions, bar, pctText, timeLeft } = require("../out
 async function main() {
   const client = new ClaudeClient(
     defaultOptions({
-      userAgent: "claude-usage-statusbar/smoke",
+      userAgent: "claude-limits-meter/smoke",
       refreshEnabled: () => false,
       clientId: async () => {
         throw new Error("unused: renewal is off");

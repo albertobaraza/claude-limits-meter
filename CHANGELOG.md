@@ -4,6 +4,12 @@ All notable changes to this extension are documented here, following
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-11-07
+
+### Changed
+
+- Renamed to Claude Limits Meter (extension id `albertobaraza.claude-limits-meter`), because the previous name was not available on the Marketplace. Settings and commands are unchanged; if you installed 0.1.0 from the `.vsix`, uninstall it and install the new one.
+
 ## [0.1.0] - 2026-11-07
 
 ### Added

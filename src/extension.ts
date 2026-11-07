@@ -13,7 +13,7 @@ const CMD_REFRESH = `${SETTINGS}.refresh`;
 const CMD_OPEN_CREDS = `${SETTINGS}.openCredentials`;
 
 export function activate(context: vscode.ExtensionContext) {
-  const log = vscode.window.createOutputChannel("Claude Usage Status Bar");
+  const log = vscode.window.createOutputChannel("Claude Limits Meter");
   const item = vscode.window.createStatusBarItem(`${context.extension.id}.usage`, vscode.StatusBarAlignment.Right, 100);
   item.name = "Claude Usage";
   item.command = CMD_MENU;
@@ -57,7 +57,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   const client = new ClaudeClient(
     defaultOptions({
-      userAgent: `claude-usage-statusbar/${context.extension.packageJSON.version}`,
+      userAgent: `claude-limits-meter/${context.extension.packageJSON.version}`,
       refreshEnabled: () => cfg().get<boolean>("refreshExpiredToken", false),
       clientId: resolveClientId,
       onWarn: (message) => {

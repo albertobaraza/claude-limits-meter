@@ -26,7 +26,7 @@ npm run test:coverage      # the same with the coverage gate CI enforces (90% li
 npm run test:package       # what `vsce package` would ship: exactly the files it should, nothing else
 xvfb-run -a npm run test:integration   # loads the extension in a real VS Code (drop xvfb-run off Linux);
                                        # VSCODE_VERSION=1.85.0 for the oldest supported version
-npm run package            # builds claude-usage-statusbar-<version>.vsix
+npm run package            # builds claude-limits-meter-<version>.vsix
 ```
 
 To see a change working, open the folder in VS Code and press **F5** (`.vscode/launch.json`), or use the `run` skill.

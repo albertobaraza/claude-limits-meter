@@ -39,7 +39,7 @@ gh run list --workflow release.yaml --limit 5 --json databaseId,status,conclusio
 gh release view v<version> --json tagName,name,publishedAt,assets --jq '{tagName,publishedAt,assets:[.assets[].name]}'
 ```
 
-It should hold `claude-usage-statusbar-<version>.vsix`, and its notes should equal the matching `CHANGELOG.md` section.
+It should hold `claude-limits-meter-<version>.vsix`, and its notes should equal the matching `CHANGELOG.md` section.
 
 ### Step 4: The Marketplace, if switched on
 
