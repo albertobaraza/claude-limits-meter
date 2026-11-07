@@ -1,0 +1,28 @@
+version: 2
+
+# One weekly update PR for the two things that go stale here: the workflow actions and the npm
+# packages (the extension has no runtime dependencies, so these are all build and test tooling),
+# major versions included. Security updates arrive separately, whenever GitHub publishes an advisory.
+#
+# A single PR instead of one per ecosystem keeps the noise to one review a week. The price is that one
+# bad bump holds the rest back; split it by hand or `@dependabot ignore` the offender.
+multi-ecosystem-groups:
+  weekly:
+    schedule:
+      interval: weekly
+    # commit-message is only valid here, not on the updates below.
+    commit-message:
+      prefix: chore
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    multi-ecosystem-group: weekly
+    patterns:
+      - "*"
+
+  - package-ecosystem: npm
+    directory: /
+    multi-ecosystem-group: weekly
+    patterns:
+      - "*"
