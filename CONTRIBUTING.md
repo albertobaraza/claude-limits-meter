@@ -9,7 +9,7 @@ This document covers the day-to-day workflow. See the [README](README.md) for wh
 bash scripts/setup.sh
 ```
 
-It checks Node (20+), installs the dependencies and, if [pre-commit](https://pre-commit.com) is installed
+It checks Node (22+), installs the dependencies and, if [pre-commit](https://pre-commit.com) is installed
 (`pipx install pre-commit`), the git hooks below. Press **F5** in VS Code to run the extension in a development window.
 
 ## Branching

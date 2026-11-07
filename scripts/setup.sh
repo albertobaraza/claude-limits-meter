@@ -9,12 +9,12 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_DIR"
 
 if ! command -v node &> /dev/null; then
-    echo "  [!!] Node.js not found. Install Node 20 or newer, then re-run this script." >&2
+    echo "  [!!] Node.js not found. Install Node 22 or newer, then re-run this script." >&2
     exit 1
 fi
 NODE_MAJOR="$(node -p "process.versions.node.split('.')[0]")"
-if [ "$NODE_MAJOR" -lt 20 ]; then
-    echo "  [!!] Node $(node --version) is too old: the tests need Node 20 or newer." >&2
+if [ "$NODE_MAJOR" -lt 22 ]; then
+    echo "  [!!] Node $(node --version) is too old: the tests need Node 22 or newer (glob arguments to node --test)." >&2
     exit 1
 fi
 echo "  [ok] Node $(node --version)"

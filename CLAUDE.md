@@ -13,7 +13,7 @@ security story.
 ## Setup
 
 ```bash
-bash scripts/setup.sh      # checks Node (20+), installs dependencies and the git hooks
+bash scripts/setup.sh      # checks Node (22+), installs dependencies and the git hooks
 ```
 
 ## Commands
