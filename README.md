@@ -60,6 +60,13 @@ It never writes to the macOS Keychain, so the option has no effect on a Keychain
 
 Commands: *Claude Usage: Show Menu*, *Refresh Now*, *Open Credentials File*.
 
+## When Claude rate limits the bar
+
+The usage endpoint answers `429` when it is asked too often, for example by clicking *Refresh Now* several times in a row. The extension is careful not to make that worse:
+
+- *Refresh Now* asks the API at most once every 10 seconds; in between it just shows what it already has.
+- After a `429` the item shows a clock icon with the last reading, and the tooltip says when the next check happens. It waits for the time Claude asks for (`Retry-After`), or 2 minutes when Claude gives none, doubling on every further `429` up to 30 minutes. *Refresh Now* does not ask again before that, and the normal checks resume by themselves.
+
 ## Privacy and security
 
 - Reads your Claude Code login (file or Keychain) and sends the **access token only to `api.anthropic.com`** to read your usage. With token refresh switched on it also contacts `console.anthropic.com`. Nothing else is contacted, and there is no telemetry.
