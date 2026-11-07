@@ -26,3 +26,7 @@ updates:
     multi-ecosystem-group: weekly
     patterns:
       - "*"
+    ignore:
+      # The version of @types/vscode may not be newer than "engines.vscode" in package.json (vsce refuses to
+      # package otherwise), so it moves by hand, together with that minimum.
+      - dependency-name: "@types/vscode"
