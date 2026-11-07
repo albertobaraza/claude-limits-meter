@@ -70,12 +70,19 @@ Commands: *Claude Usage: Show Menu*, *Refresh Now*, *Open Credentials File*.
 ## Development
 
 ```bash
-npm ci
-npm test            # compiles, then runs the unit tests (node:test, no VS Code needed)
-npm run package     # builds the .vsix
+bash scripts/setup.sh                    # dependencies and git hooks
+npm test                                 # unit tests (node:test, no VS Code needed)
+npm run test:coverage                    # the same, with the coverage gate CI enforces
+xvfb-run -a npm run test:integration     # loads the extension in a real VS Code (no xvfb-run off Linux)
+npm run package                          # builds the .vsix
 ```
 
-The logic that doesn't need VS Code lives in `src/claude.ts` and is tested in `test/`; `src/extension.ts` is only the status-bar UI.
+Press **F5** in VS Code to run the extension in a development window. The logic that does not need VS Code lives in
+`src/claude.ts`, `src/state.ts` and `src/view.ts` and is unit-tested; `src/extension.ts` is only the status-bar glue.
+
+Contributions go through pull requests (nothing is pushed to `main`); [CONTRIBUTING.md](CONTRIBUTING.md) has the branch,
+commit and changelog conventions, [docs/RELEASING.md](docs/RELEASING.md) how releases are made, and
+[SECURITY.md](SECURITY.md) how to report a vulnerability.
 
 ## Related projects
 
