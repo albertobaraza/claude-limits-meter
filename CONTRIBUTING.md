@@ -137,5 +137,9 @@ covered by CI. If the branch name starts with an issue number (`42/...`), start 
 ## Claude Code
 
 The project carries instructions for Claude Code in [CLAUDE.md](CLAUDE.md) and skills in `.claude/skills/`: `commit`,
-`pr`, `changelog`, `ci`, `run` and `release`. By default Claude works with you: its skills confirm before committing or
-opening a pull request, and **you push**. `.claude/settings.json` denies Claude `git push`, `gh pr merge` and publishing.
+`pr`, `changelog`, `ci`, `run`, `release` and `todo`. By default Claude works with you: its skills confirm before
+committing or opening a pull request, and **you push**. `.claude/settings.json` denies Claude `git push`, `gh pr merge`
+and publishing.
+
+The `todo` skill keeps a local, untracked `TODO.md` at the repo root as a scratch backlog: it turns the entries into
+GitHub issues (on the "Claude" project board, with a priority) and clears them from the file.
