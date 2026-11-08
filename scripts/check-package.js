@@ -26,6 +26,7 @@ const MUST_NOT_HAVE = [
   /^package-lock\.json$/,
   /^CLAUDE\.md$/,
   /^CONTRIBUTING\.md$/,
+  /^TODO\.md$/,
 ];
 const MAX_BYTES = 200 * 1024;
 
