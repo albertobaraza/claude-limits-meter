@@ -99,3 +99,37 @@ jobs:
         run: npm run test:integration
         env:
           VSCODE_VERSION: ${{ matrix.vscode }}
+
+  # The packaged .vsix installed in a real VS Code and driven through its window: what the status bar, its hover and
+  # its menu really show in a Production build, which the job above cannot see. Linux only for now.
+  ui:
+    name: UI (ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      # A screen big enough for the VS Code window: Xvfb's default is 640x480.
+      - name: Run the UI test
+        run: |
+          command -v xvfb-run >/dev/null || sudo apt-get install -y xvfb
+          xvfb-run -a -s "-screen 0 1280x800x24" npm run test:ui
+
+      # A failed scenario also leaves a screenshot of the window where it failed.
+      - name: Keep the screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-screenshots
+          path: .vscode-test/screenshots
+          if-no-files-found: ignore
+          retention-days: 7
