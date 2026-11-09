@@ -8,6 +8,8 @@ export interface Snapshot {
   fiveHourReset?: string | null;
   sevenDay: number;
   sevenDayReset?: string | null;
+  /** When (epoch ms) this reading was taken, so the tooltip and menu can say how old the numbers are. */
+  checkedAt: number;
 }
 
 export type Status =
@@ -77,6 +79,7 @@ export async function check(
         fiveHourReset: data.five_hour?.resets_at,
         sevenDay: data.seven_day?.utilization ?? 0,
         sevenDayReset: data.seven_day?.resets_at,
+        checkedAt: now(),
       },
     };
   } catch (e) {

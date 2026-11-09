@@ -323,6 +323,12 @@ test("findClientId reads CLIENT_ID from the first extension dir that has it", as
 
 // ── formatting ───────────────────────────────────────────────────────────────
 
+test("clockTime is the local 24-hour time, zero-padded", () => {
+  assert.equal(c.clockTime(new Date(2026, 0, 1, 14, 32, 59).getTime()), "14:32");
+  assert.equal(c.clockTime(new Date(2026, 0, 1, 0, 5).getTime()), "00:05");
+  assert.equal(c.clockTime(new Date(2026, 0, 1, 9, 0).getTime()), "09:00");
+});
+
 test("bar / pctText / timeLeft", () => {
   assert.equal(c.bar(0), "░░░░░░░░░░");
   assert.equal(c.bar(42), "████░░░░░░");

@@ -126,6 +126,7 @@ export function activate(context: vscode.ExtensionContext) {
     const items: Item[] = menuEntries(state).map((e) => ({
       label: e.label,
       description: e.description,
+      detail: e.detail,
       kind: e.separator ? vscode.QuickPickItemKind.Separator : vscode.QuickPickItemKind.Default,
       run: e.action && actions[e.action],
     }));
