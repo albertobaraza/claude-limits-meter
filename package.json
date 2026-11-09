@@ -38,15 +38,15 @@
     "commands": [
       {
         "command": "claudeLimitsMeter.showMenu",
-        "title": "Claude Usage: Show Menu"
+        "title": "Claude Limits Meter: Show Menu"
       },
       {
         "command": "claudeLimitsMeter.refresh",
-        "title": "Claude Usage: Refresh Now"
+        "title": "Claude Limits Meter: Refresh Now"
       },
       {
         "command": "claudeLimitsMeter.openCredentials",
-        "title": "Claude Usage: Open Credentials File"
+        "title": "Claude Limits Meter: Open Credentials File"
       }
     ],
     "configuration": {

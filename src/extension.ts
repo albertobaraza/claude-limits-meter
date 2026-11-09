@@ -15,7 +15,7 @@ const CMD_OPEN_CREDS = `${SETTINGS}.openCredentials`;
 export function activate(context: vscode.ExtensionContext) {
   const log = vscode.window.createOutputChannel("Claude Limits Meter");
   const item = vscode.window.createStatusBarItem(`${context.extension.id}.usage`, vscode.StatusBarAlignment.Right, 100);
-  item.name = "Claude Usage";
+  item.name = "Claude Limits Meter";
   item.command = CMD_MENU;
 
   let state: State = INITIAL_STATE;
@@ -62,7 +62,7 @@ export function activate(context: vscode.ExtensionContext) {
       clientId: resolveClientId,
       onWarn: (message) => {
         logLine(message);
-        void vscode.window.showWarningMessage(`Claude Usage: ${message}`);
+        void vscode.window.showWarningMessage(`Claude Limits Meter: ${message}`);
       },
     }),
   );
@@ -129,7 +129,7 @@ export function activate(context: vscode.ExtensionContext) {
       kind: e.separator ? vscode.QuickPickItemKind.Separator : vscode.QuickPickItemKind.Default,
       run: e.action && actions[e.action],
     }));
-    const picked = await vscode.window.showQuickPick(items, { title: "Claude Usage", placeHolder: "Claude usage" });
+    const picked = await vscode.window.showQuickPick(items, { title: "Claude Limits Meter", placeHolder: "Claude usage" });
     await picked?.run?.();
   }
 

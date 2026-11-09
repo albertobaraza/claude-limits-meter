@@ -58,7 +58,7 @@ It never writes to the macOS Keychain, so the option has no effect on a Keychain
 | `claudeLimitsMeter.refreshExpiredToken` | `false` | See above. |
 | `claudeLimitsMeter.clientId` | `""` | OAuth client id for the option above; empty means auto-detect. |
 
-Commands: *Claude Usage: Show Menu*, *Refresh Now*, *Open Credentials File*.
+Commands: *Claude Limits Meter: Show Menu*, *Refresh Now*, *Open Credentials File*.
 
 ## When Claude rate limits the bar
 
