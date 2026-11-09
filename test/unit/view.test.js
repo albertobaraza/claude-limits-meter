@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 const { statusView, menuEntries, devView, escapeMarkdown, SETTINGS } = require("../../out/view.js");
 
 const NOW = Date.parse("2026-01-01T00:00:00Z");
-const COMMANDS = { refresh: "ext.refresh", openCredentials: "ext.openCreds" };
+const COMMANDS = { refresh: "ext.refresh", openCredentials: "ext.openCreds", openSettings: "ext.openSettings" };
 const SNAPSHOT = {
   fiveHour: 42.9,
   fiveHourReset: "2026-01-01T02:13:00+00:00",
@@ -19,11 +19,29 @@ test("every state links to the refresh and credentials commands", () => {
     const { markdown } = view({ status, snapshot: SNAPSHOT, error: "x" });
     assert.match(markdown, /\[Refresh Now\]\(command:ext\.refresh\)/, status);
     assert.match(markdown, /\[Open Credentials File\]\(command:ext\.openCreds\)/, status);
+    assert.match(markdown, /\[Settings\]\(command:ext\.openSettings\)/, status);
   }
 });
 
 test("ok shows the 5-hour percentage, truncated, in the status bar", () => {
   assert.equal(view({ status: "ok", snapshot: SNAPSHOT }).text, "$(sparkle) 42%");
+});
+
+test("showWeekly puts the 7-day week next to the 5-hour session in the status-bar text", () => {
+  const both = (state) => statusView(state, COMMANDS, NOW, { showWeekly: true });
+  assert.equal(both({ status: "ok", snapshot: SNAPSHOT }).text, "$(sparkle) 5h 42% · 7d 18%");
+  assert.equal(both({ status: "rateLimited", snapshot: SNAPSHOT, retryAt: NOW + 1000 }).text, "$(clock) 5h 42% · 7d 18%");
+  assert.equal(both({ status: "rateLimited", retryAt: NOW + 1000 }).text, "$(clock) —", "no reading yet");
+  assert.equal(both({ status: "ok" }).text, "$(sparkle) 5h 0% · 7d 0%");
+  // The states that show a symbol instead of numbers are the same with the setting on.
+  for (const status of ["loading", "noCreds", "expired", "error"]) {
+    const state = { status, snapshot: SNAPSHOT, error: "x" };
+    assert.equal(both(state).text, view(state).text, status);
+  }
+  // Off is the default, whether the option is left out, empty or false, and the hover is the same either way.
+  assert.equal(statusView({ status: "ok", snapshot: SNAPSHOT }, COMMANDS, NOW, {}).text, "$(sparkle) 42%");
+  assert.equal(statusView({ status: "ok", snapshot: SNAPSHOT }, COMMANDS, NOW, { showWeekly: false }).text, "$(sparkle) 42%");
+  assert.equal(both({ status: "ok", snapshot: SNAPSHOT }).markdown, view({ status: "ok", snapshot: SNAPSHOT }).markdown);
 });
 
 test("the hover is a short summary of both windows and when they were last checked, with no bars", () => {
@@ -85,6 +103,7 @@ test("the menu says when the rate limit ends, between the usage lines and the ac
       "",
       "$(refresh) Refresh Now",
       "$(key) Open Credentials File",
+      "$(gear) Settings",
     ],
   );
   assert.equal(entries[2].description, "next check in 3m");
@@ -117,13 +136,14 @@ test("the menu lists both windows with bars and reset times, when they were chec
       "",
       "$(refresh) Refresh Now",
       "$(key) Open Credentials File",
+      "$(gear) Settings",
     ],
   );
   assert.equal(entries[0].description, "████░░░░░░ 42%   ⏱ 2h 13m");
   assert.equal(entries[1].description, "██░░░░░░░░ 18%   ⏱ 4d 2h");
   assert.equal(entries[2].description, "14:32");
   assert.equal(entries[3].separator, true);
-  assert.deepEqual(entries.filter((e) => e.action).map((e) => e.action), ["refresh", "openCredentials"]);
+  assert.deepEqual(entries.filter((e) => e.action).map((e) => e.action), ["refresh", "openCredentials", "openSettings"]);
   assert.equal(entries[0].action, undefined, "usage lines are informational");
   assert.equal(entries[2].action, undefined, "so is the last-checked line");
 });
@@ -151,5 +171,5 @@ test("the menu explains a state that needs it, as plain text, between the usage 
   assert.equal(error.detail, "Usage fetch failed: HTTP 500", "the message as it is, not escaped for Markdown");
   assert.equal(menuEntries({ status: "error" }, NOW)[1].detail, "Unknown error");
 
-  assert.equal(labels({ status: "ok", snapshot: SNAPSHOT }).length, 6, "an ok state needs no explanation");
+  assert.equal(labels({ status: "ok", snapshot: SNAPSHOT }).length, 7, "an ok state needs no explanation");
 });

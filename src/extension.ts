@@ -11,6 +11,7 @@ import { SETTINGS, devView, menuEntries, statusView } from "./view";
 const CMD_MENU = `${SETTINGS}.showMenu`;
 const CMD_REFRESH = `${SETTINGS}.refresh`;
 const CMD_OPEN_CREDS = `${SETTINGS}.openCredentials`;
+const CMD_OPEN_SETTINGS = `${SETTINGS}.openSettings`;
 
 /**
  * What `activate()` hands to a test, outside the installed extension only: VS Code has no API to read a status-bar
@@ -86,10 +87,11 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
 
   // ── rendering ──
   function render() {
-    const plain = statusView(state, { refresh: CMD_REFRESH, openCredentials: CMD_OPEN_CREDS });
+    const commands = { refresh: CMD_REFRESH, openCredentials: CMD_OPEN_CREDS, openSettings: CMD_OPEN_SETTINGS };
+    const plain = statusView(state, commands, Date.now(), { showWeekly: cfg().get<boolean>("showWeekly", false) });
     const view = dev ? devView(plain) : plain;
     const tooltip = new vscode.MarkdownString(view.markdown, true);
-    tooltip.isTrusted = { enabledCommands: [CMD_REFRESH, CMD_OPEN_CREDS] };
+    tooltip.isTrusted = { enabledCommands: [CMD_REFRESH, CMD_OPEN_CREDS, CMD_OPEN_SETTINGS] };
     item.text = view.text;
     item.tooltip = tooltip;
   }
@@ -138,8 +140,13 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
     }
   }
 
+  /** The Settings editor, filtered to this extension's settings. */
+  async function openSettings() {
+    await vscode.commands.executeCommand("workbench.action.openSettings", `@ext:${context.extension.id}`);
+  }
+
   async function showMenu() {
-    const actions = { refresh: refreshNow, openCredentials };
+    const actions = { refresh: refreshNow, openCredentials, openSettings };
     type Item = vscode.QuickPickItem & { run?: () => unknown };
     const items: Item[] = menuEntries(state).map((e) => ({
       label: e.label,
@@ -159,6 +166,7 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
     vscode.commands.registerCommand(CMD_MENU, showMenu),
     vscode.commands.registerCommand(CMD_REFRESH, refreshNow),
     vscode.commands.registerCommand(CMD_OPEN_CREDS, openCredentials),
+    vscode.commands.registerCommand(CMD_OPEN_SETTINGS, openSettings),
     vscode.window.onDidChangeWindowState((s) => {
       // catch up right away when the window comes back after skipped polls
       const now = Date.now();
@@ -166,6 +174,7 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
     }),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration(`${SETTINGS}.pollIntervalSeconds`)) schedule();
+      if (e.affectsConfiguration(`${SETTINGS}.showWeekly`)) render();
       if (e.affectsConfiguration(`${SETTINGS}.refreshExpiredToken`)) void refreshNow();
     }),
   );

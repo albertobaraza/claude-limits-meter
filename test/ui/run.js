@@ -155,6 +155,7 @@ const scenarios = {
       assert.match(tooltip, /No Claude Code login found on this machine/);
       assert.match(tooltip, /Refresh Now/);
       assert.match(tooltip, /Open Credentials File/);
+      assert.match(tooltip, /\bSettings\b/);
       assert.doesNotMatch(tooltip, /Development build/, "an installed .vsix is not a development build");
 
       const rows = await clickMenu(page, item, "no-login");
@@ -163,6 +164,7 @@ const scenarios = {
       assert.match(menu, /No Claude Code login found/);
       assert.match(menu, /Refresh Now/);
       assert.match(menu, /Open Credentials File/);
+      assert.match(menu, /\bSettings\b/);
 
       // Picking an entry runs it: with no file to open, the user is told what to do.
       await page.locator(".quick-input-list .monaco-list-row", { hasText: "Open Credentials File" }).click();
