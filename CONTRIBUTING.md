@@ -72,7 +72,13 @@ The integration test, the coverage gate and the package check run in CI, not on 
 | `npm test` | Unit tests of `claude.ts`, `state.ts`, `view.ts` and the scripts, against a mock server and a stubbed `security` command |
 | `npm run test:coverage` | The same, failing under 90% lines / 85% branches / 80% functions |
 | `npm run test:package` | The `.vsix` holds what it should and nothing else |
-| `xvfb-run -a npm run test:integration` | The extension loaded in a real VS Code: activates, registers its commands, has its settings |
+| `xvfb-run -a npm run test:integration` | The extension loaded in a real VS Code with a fake login and a fake Claude API: activates, registers its commands, has its settings, and shows the right status-bar item for no login, a reading, 429, 401, 500 and a renewed login |
+| `xvfb-run -a -s "-screen 0 1280x800x24" npm run test:ui` | The packaged `.vsix` installed in a real VS Code and driven through its window (Playwright): the status-bar item, its hover and its menu, with screenshots in `.vscode-test/screenshots` |
+| `npm run test:integration:docker` | Both of the above in a clean Linux container (`test/ui/Dockerfile`, Node 22, Xvfb). A local convenience; CI uses the native runners |
+
+Both real-VS-Code tests run on a throwaway profile and HOME, and strip the `VSCODE_*` variables a VS Code terminal sets,
+so they never touch your own VS Code or your Claude login. Keep it that way: never run the `code` CLI from a test without
+`cleanEnv()` (`test/integration/common.js`).
 
 A change to the logic comes with a test. Code that needs the `vscode` API stays in `src/extension.ts` and stays thin.
 
@@ -115,7 +121,8 @@ listing) by itself. [docs/RELEASING.md](docs/RELEASING.md) has the details and h
 Open a pull request against `main` using the [`pr`](.claude/skills/pr) skill (or by hand). CI runs automatically:
 
 - [`test.yaml`](.github/workflows/test.yaml): typecheck and unit tests on Linux, macOS and Windows, the coverage gate,
-  the package check, `npm audit`, and the integration test in VS Code 1.85.0 and stable.
+  the package check, `npm audit`, the integration test in VS Code 1.85.0 and stable, and the UI test of the packaged
+  `.vsix` on Linux (screenshots are kept as a build artifact).
 - [`ci.yml`](.github/workflows/ci.yml): release metadata, commit messages, file hygiene, `actionlint` on the workflows,
   and Gitleaks over the full history.
 
