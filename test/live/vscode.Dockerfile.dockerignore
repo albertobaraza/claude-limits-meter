@@ -1,0 +1,12 @@
+# What `docker build -f test/live/vscode.Dockerfile .` leaves out of the build context: all but what the Dockerfile copies.
+*
+!package.json
+!package-lock.json
+!tsconfig.json
+!.vscodeignore
+!src
+!docs
+!README.md
+!CHANGELOG.md
+!LICENSE
+!test/live/vscode
