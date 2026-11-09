@@ -127,7 +127,7 @@ jobs:
       # A failed scenario also leaves a screenshot of the window where it failed.
       - name: Keep the screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ui-screenshots
           path: .vscode-test/screenshots
