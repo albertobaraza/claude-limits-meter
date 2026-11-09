@@ -31,16 +31,24 @@ const client = ({ token = { kind: "ok", token: "T" }, usage = USAGE, tokenError,
 
 const PREV = { status: "ok", snapshot: { fiveHour: 10, sevenDay: 20 } };
 
-test("a good reading becomes the ok state with both windows", async () => {
-  assert.deepEqual(await check(client(), INITIAL_STATE), {
+test("a good reading becomes the ok state with both windows and the time it was taken", async () => {
+  const takenAt = Date.parse("2026-01-01T00:00:00Z");
+  assert.deepEqual(await check(client(), INITIAL_STATE, () => {}, () => takenAt), {
     status: "ok",
     snapshot: {
       fiveHour: 36.4,
       fiveHourReset: "2026-01-01T05:00:00+00:00",
       sevenDay: 65,
       sevenDayReset: "2026-01-03T00:00:00+00:00",
+      checkedAt: takenAt,
     },
   });
+});
+
+test("a failed check keeps the old reading with the time it was taken, not the time of the failure", async () => {
+  const old = { fiveHour: 10, sevenDay: 20, checkedAt: 111 };
+  const next = await check(client({ usageError: new Error("offline") }), { status: "ok", snapshot: old }, () => {}, () => 999);
+  assert.equal(next.snapshot.checkedAt, 111);
 });
 
 test("a window the API leaves out counts as 0%", async () => {

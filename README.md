@@ -5,13 +5,17 @@ Shows your [Claude Code](https://code.claude.com) usage limits, the **5-hour ses
 > **Unofficial.** This is an independent project, not affiliated with or endorsed by Anthropic. It uses an undocumented usage endpoint that may change without notice.
 
 ```
-✦ 42%                 ← status bar: current 5-hour session usage
+✦ 42%                                          ← status bar: current 5-hour session usage
 
-Session (5h)  ████░░░░░░  42%   ⏱ 2h 13m      ← hover tooltip
-Weekly  (7d)  ██░░░░░░░░  18%   ⏱ 4d 2h
+Session (5h) 42% · Weekly (7d) 18%             ← hover: a short summary
+Last checked 14:32
+
+Session (5h)  ████░░░░░░ 42%   ⏱ 2h 13m       ← click: the details
+Weekly (7d)   ██░░░░░░░░ 18%   ⏱ 4d 2h
+Last checked  14:32
 ```
 
-Click the status bar item for a menu with both windows, **Refresh Now** and **Open Credentials File**. It is deliberately minimal.
+Hover the status bar item for a short summary of both windows. Click it for the details (a bar and the time until each window resets, and when the usage was last checked), plus **Refresh Now** and **Open Credentials File**. It is deliberately minimal.
 
 ## Platforms
 

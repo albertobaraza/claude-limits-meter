@@ -304,6 +304,12 @@ export function pctText(p: number): string {
   return `${Math.trunc(p)}`.padStart(3) + "%";
 }
 
+/** "14:32": the local 24-hour clock time of an epoch-ms timestamp. */
+export function clockTime(at: number): string {
+  const d = new Date(at);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
 export function timeLeft(resetsAt: string | null | undefined, now = Date.now()): string {
   if (!resetsAt) return "?";
   const reset = Date.parse(resetsAt);

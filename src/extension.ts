@@ -6,17 +6,21 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { CREDS_PATH, ClaudeClient, defaultOptions, findClientId } from "./claude";
 import { INITIAL_STATE, check, nextPollDelay, refreshAllowedAt, retryAt, type State } from "./state";
-import { SETTINGS, menuEntries, statusView } from "./view";
+import { SETTINGS, devView, menuEntries, statusView } from "./view";
 
 const CMD_MENU = `${SETTINGS}.showMenu`;
 const CMD_REFRESH = `${SETTINGS}.refresh`;
 const CMD_OPEN_CREDS = `${SETTINGS}.openCredentials`;
 
 export function activate(context: vscode.ExtensionContext) {
-  const log = vscode.window.createOutputChannel("Claude Limits Meter");
+  // Anything but the installed extension (F5, --extensionDevelopmentPath, the test host) says so on screen.
+  const dev = context.extensionMode !== vscode.ExtensionMode.Production;
+  const name = dev ? "Claude Limits Meter (dev)" : "Claude Limits Meter";
+  const log = vscode.window.createOutputChannel(name);
   const item = vscode.window.createStatusBarItem(`${context.extension.id}.usage`, vscode.StatusBarAlignment.Right, 100);
-  item.name = "Claude Limits Meter";
+  item.name = name;
   item.command = CMD_MENU;
+  if (dev) item.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground");
 
   let state: State = INITIAL_STATE;
   let inFlight: Promise<void> | undefined;
@@ -69,7 +73,8 @@ export function activate(context: vscode.ExtensionContext) {
 
   // ── rendering ──
   function render() {
-    const view = statusView(state, { refresh: CMD_REFRESH, openCredentials: CMD_OPEN_CREDS });
+    const plain = statusView(state, { refresh: CMD_REFRESH, openCredentials: CMD_OPEN_CREDS });
+    const view = dev ? devView(plain) : plain;
     const tooltip = new vscode.MarkdownString(view.markdown, true);
     tooltip.isTrusted = { enabledCommands: [CMD_REFRESH, CMD_OPEN_CREDS] };
     item.text = view.text;
@@ -126,10 +131,11 @@ export function activate(context: vscode.ExtensionContext) {
     const items: Item[] = menuEntries(state).map((e) => ({
       label: e.label,
       description: e.description,
+      detail: e.detail,
       kind: e.separator ? vscode.QuickPickItemKind.Separator : vscode.QuickPickItemKind.Default,
       run: e.action && actions[e.action],
     }));
-    const picked = await vscode.window.showQuickPick(items, { title: "Claude Limits Meter", placeHolder: "Claude usage" });
+    const picked = await vscode.window.showQuickPick(items, { title: name, placeHolder: "Claude usage" });
     await picked?.run?.();
   }
 
