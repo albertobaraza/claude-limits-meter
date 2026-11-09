@@ -4,7 +4,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { CREDS_PATH, ClaudeClient, defaultOptions, findClientId } from "./claude";
+import { CREDS_PATH, ClaudeClient, defaultOptions, findClientId, testOverrides } from "./claude";
 import { INITIAL_STATE, check, nextPollDelay, refreshAllowedAt, retryAt, type State } from "./state";
 import { SETTINGS, devView, menuEntries, statusView } from "./view";
 
@@ -12,7 +12,18 @@ const CMD_MENU = `${SETTINGS}.showMenu`;
 const CMD_REFRESH = `${SETTINGS}.refresh`;
 const CMD_OPEN_CREDS = `${SETTINGS}.openCredentials`;
 
-export function activate(context: vscode.ExtensionContext) {
+/**
+ * What `activate()` hands to a test, outside the installed extension only: VS Code has no API to read a status-bar
+ * item, and the refresh command refuses to ask the API twice in 10 s, which a test that walks through the states must.
+ */
+export interface TestApi {
+  /** What the status-bar item shows right now. */
+  statusBar(): { text: string; tooltip: string; backgroundColor?: string };
+  /** Waits for a check in flight, then runs a fresh one and returns once its result is on screen. */
+  checkNow(): Promise<void>;
+}
+
+export function activate(context: vscode.ExtensionContext): TestApi | undefined {
   // Anything but the installed extension (F5, --extensionDevelopmentPath, the test host) says so on screen.
   const dev = context.extensionMode !== vscode.ExtensionMode.Production;
   const name = dev ? "Claude Limits Meter (dev)" : "Claude Limits Meter";
@@ -59,8 +70,8 @@ export function activate(context: vscode.ExtensionContext) {
     return id;
   }
 
-  const client = new ClaudeClient(
-    defaultOptions({
+  const client = new ClaudeClient({
+    ...defaultOptions({
       userAgent: `claude-limits-meter/${context.extension.packageJSON.version}`,
       refreshEnabled: () => cfg().get<boolean>("refreshExpiredToken", false),
       clientId: resolveClientId,
@@ -69,7 +80,9 @@ export function activate(context: vscode.ExtensionContext) {
         void vscode.window.showWarningMessage(`Claude Limits Meter: ${message}`);
       },
     }),
-  );
+    // Only a test host (`--extensionTestsPath`) may redirect the API to a fake one; see TEST_ENV.
+    ...(context.extensionMode === vscode.ExtensionMode.Test ? testOverrides(process.env) : {}),
+  });
 
   // ── rendering ──
   function render() {
@@ -160,6 +173,20 @@ export function activate(context: vscode.ExtensionContext) {
   render();
   item.show();
   void poll().then(schedule);
+
+  if (!dev) return undefined;
+  return {
+    statusBar: () => ({
+      text: item.text,
+      tooltip: typeof item.tooltip === "string" ? item.tooltip : (item.tooltip?.value ?? ""),
+      // `id` is on every ThemeColor at runtime but missing from @types/vscode.
+      backgroundColor: (item.backgroundColor as { id?: string } | undefined)?.id,
+    }),
+    checkNow: async () => {
+      await inFlight;
+      await poll();
+    },
+  };
 }
 
 export function deactivate() {}

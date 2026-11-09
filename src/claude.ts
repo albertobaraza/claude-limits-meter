@@ -55,6 +55,45 @@ export function defaultOptions(
   };
 }
 
+/**
+ * What a test host may set to point the extension at a fake API. `extension.ts` reads them only when VS Code
+ * says it is running tests (`ExtensionMode.Test`); an installed extension never looks at them.
+ */
+export const TEST_ENV = {
+  usageUrl: "CLAUDE_LIMITS_METER_TEST_USAGE_URL",
+  tokenUrl: "CLAUDE_LIMITS_METER_TEST_TOKEN_URL",
+  /** Any non-empty value: never run `security`, so a test on macOS cannot read a real login. */
+  noKeychain: "CLAUDE_LIMITS_METER_TEST_NO_KEYCHAIN",
+} as const;
+
+/**
+ * An http URL on this machine's loopback, or a thrown error. Even in a test host the login can only be sent to
+ * a fake API on this machine, so the "only api.anthropic.com" promise holds however the environment is set.
+ */
+function loopbackUrl(name: string, value: string): string {
+  let url: URL | undefined;
+  try {
+    url = new URL(value);
+  } catch {
+    // reported below
+  }
+  if (!url || url.protocol !== "http:" || !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)) {
+    throw new Error(`${name} must be an http URL on 127.0.0.1, localhost or [::1]`);
+  }
+  return value;
+}
+
+/** The options a test host asks for through `TEST_ENV`; none when it asks for nothing. Throws on a URL that is not loopback. */
+export function testOverrides(env: NodeJS.ProcessEnv): Partial<Pick<ClaudeOptions, "usageUrl" | "tokenUrl" | "exec">> {
+  const out: Partial<Pick<ClaudeOptions, "usageUrl" | "tokenUrl" | "exec">> = {};
+  const usage = env[TEST_ENV.usageUrl];
+  const token = env[TEST_ENV.tokenUrl];
+  if (usage) out.usageUrl = loopbackUrl(TEST_ENV.usageUrl, usage);
+  if (token) out.tokenUrl = loopbackUrl(TEST_ENV.tokenUrl, token);
+  if (env[TEST_ENV.noKeychain]) out.exec = () => Promise.reject(new Error("the Keychain is switched off in tests"));
+  return out;
+}
+
 interface OAuthCreds {
   accessToken?: string;
   refreshToken?: string;
