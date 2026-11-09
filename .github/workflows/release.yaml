@@ -29,7 +29,7 @@ jobs:
   release:
     name: GitHub release
     needs: test
-    if: github.repository == 'albertobaraza/claude-usage-statusbar'
+    if: github.repository == 'albertobaraza/claude-limits-meter'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

@@ -4,7 +4,7 @@
 import { bar, pctText, timeLeft } from "./claude";
 import { retryAt, type Snapshot, type State } from "./state";
 
-export const SETTINGS = "claudeUsageStatusbar";
+export const SETTINGS = "claudeLimitsMeter";
 
 export interface StatusView {
   /** Status-bar text; may contain $(codicon) markers. */

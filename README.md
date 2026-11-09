@@ -32,8 +32,8 @@ On macOS the first read may show a system prompt asking whether `security` may u
 Not on the Marketplace yet. Build and install the `.vsix` yourself:
 
 ```bash
-git clone https://github.com/albertobaraza/claude-usage-statusbar.git
-cd claude-usage-statusbar
+git clone https://github.com/albertobaraza/claude-limits-meter.git
+cd claude-limits-meter
 npm ci
 npm run package                 # produces claude-limits-meter-<version>.vsix
 code --install-extension claude-limits-meter-*.vsix
@@ -43,7 +43,7 @@ code --install-extension claude-limits-meter-*.vsix
 
 Claude Code's access token lasts a few hours and Claude Code renews it whenever it is used. The extension re-reads your login on every check, so it picks up a renewed token by itself. If you have not used Claude Code for a while the item shows `!` until you do.
 
-If you would rather renew from here, turn on **`claudeUsageStatusbar.refreshExpiredToken`**. It is **off by default** because:
+If you would rather renew from here, turn on **`claudeLimitsMeter.refreshExpiredToken`**. It is **off by default** because:
 
 - refresh tokens rotate: if the renewed login cannot be written back, Claude Code may ask you to sign in again (the extension retries, keeps the new token in memory, and warns you);
 - it uses Claude Code's own OAuth client id, detected from the installed Claude Code extension.
@@ -54,11 +54,11 @@ It never writes to the macOS Keychain, so the option has no effect on a Keychain
 
 | Setting | Default | |
 | --- | --- | --- |
-| `claudeUsageStatusbar.pollIntervalSeconds` | `60` | Seconds between checks (minimum 15). Checks are skipped while the window is unfocused. |
-| `claudeUsageStatusbar.refreshExpiredToken` | `false` | See above. |
-| `claudeUsageStatusbar.clientId` | `""` | OAuth client id for the option above; empty means auto-detect. |
+| `claudeLimitsMeter.pollIntervalSeconds` | `60` | Seconds between checks (minimum 15). Checks are skipped while the window is unfocused. |
+| `claudeLimitsMeter.refreshExpiredToken` | `false` | See above. |
+| `claudeLimitsMeter.clientId` | `""` | OAuth client id for the option above; empty means auto-detect. |
 
-Commands: *Claude Usage: Show Menu*, *Refresh Now*, *Open Credentials File*.
+Commands: *Claude Limits Meter: Show Menu*, *Refresh Now*, *Open Credentials File*.
 
 ## When Claude rate limits the bar
 

@@ -15,7 +15,7 @@ echo "Running script '${BASH_SOURCE[0]}'"
 
 set -euo pipefail
 
-REPO="${REPO:-albertobaraza/claude-usage-statusbar}"
+REPO="${REPO:-albertobaraza/claude-limits-meter}"
 
 # The job names of test.yaml and ci.yml, as they appear on a pull request.
 CHECKS=(

@@ -39,7 +39,7 @@ else
 fi
 
 echo ""
-echo "  claude-usage-statusbar: setup complete"
+echo "  claude-limits-meter: setup complete"
 echo ""
 echo "  Run the extension: open this folder in VS Code and press F5."
 echo "  Run the tests:     npm test"
