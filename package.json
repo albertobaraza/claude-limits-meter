@@ -4,6 +4,7 @@
   "description": "Unofficial: shows your Claude Code usage (5-hour session and 7-day weekly limits) in the VS Code status bar. Works on Linux, macOS, Windows, WSL and remote hosts. Thanks to Claude Usage Bar by Harsh Agarwal, whose source helped.",
   "version": "0.4.0",
   "publisher": "albertobaraza",
+  "icon": "images/icon.png",
   "license": "MIT",
   "repository": {
     "type": "git",
