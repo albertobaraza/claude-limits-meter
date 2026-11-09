@@ -2,7 +2,7 @@
   "name": "claude-limits-meter",
   "displayName": "Claude Limits Meter",
   "description": "Unofficial: shows your Claude Code usage (5-hour session and 7-day weekly limits) in the VS Code status bar. Works on Linux, macOS, Windows, WSL and remote hosts. Thanks to Claude Usage Bar by Harsh Agarwal, whose source helped.",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "publisher": "albertobaraza",
   "license": "MIT",
   "repository": {
@@ -79,6 +79,8 @@
     "test:unit": "npm run compile && node --test \"test/unit/**/*.test.js\"",
     "test:coverage": "npm run compile && node --test --experimental-test-coverage --test-coverage-include=\"out/**\" --test-coverage-exclude=\"out/extension.js\" --test-coverage-lines=90 --test-coverage-branches=85 --test-coverage-functions=80 \"test/unit/**/*.test.js\"",
     "test:integration": "npm run compile && node test/integration/run.js",
+    "test:ui": "npm run compile && node test/ui/run.js",
+    "test:integration:docker": "node test/ui/docker.js",
     "test:package": "npm run compile && node scripts/check-package.js",
     "package": "npm run compile && vsce package --no-dependencies",
     "smoke": "npm run compile && node scripts/smoke.js"
@@ -88,6 +90,7 @@
     "@types/vscode": "^1.85.0",
     "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^4.1.0",
+    "playwright-core": "^1.65.0",
     "typescript": "^7.0.2"
   }
 }

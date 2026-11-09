@@ -4,6 +4,12 @@ All notable changes to this extension are documented here, following
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-11-09
+
+### Changed
+
+- No change in what the extension does. It now carries hooks for its automated tests; they are switched off in the installed extension, which still contacts only `api.anthropic.com` (and `console.anthropic.com` when token renewal is on).
+
 ## [0.3.0] - 2026-11-09
 
 ### Added

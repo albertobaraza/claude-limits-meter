@@ -24,13 +24,21 @@ npm run typecheck          # tsc --noEmit
 npm test                   # unit tests (node:test, no VS Code needed); also what the pre-push hook runs
 npm run test:coverage      # the same with the coverage gate CI enforces (90% lines, 85% branches, 80% functions)
 npm run test:package       # what `vsce package` would ship: exactly the files it should, nothing else
-xvfb-run -a npm run test:integration   # loads the extension in a real VS Code (drop xvfb-run off Linux);
-                                       # VSCODE_VERSION=1.85.0 for the oldest supported version
+xvfb-run -a npm run test:integration   # loads the extension in a real VS Code against a fake Claude API (drop xvfb-run
+                                       # off Linux); VSCODE_VERSION=1.85.0 for the oldest supported version
+xvfb-run -a -s "-screen 0 1280x800x24" npm run test:ui   # installs the packaged .vsix and drives the real window
+                                                         # (Playwright); screenshots in .vscode-test/screenshots
+npm run test:integration:docker        # both of the above in a clean Linux container (no mounts, so no login to see)
 npm run package            # builds claude-limits-meter-<version>.vsix
+./scripts/run.sh           # the live environment: VS Code in a browser (:8788) with the packaged extension, and a mock
+                           # Claude (:4010) with a control page; Ctrl+C stops it. Blocks: run it in the background.
 ```
 
 To see a change working, open the folder in VS Code and press **F5** (`.vscode/launch.json`), or use the `run` skill.
-Running from a VS Code terminal sets `ELECTRON_RUN_AS_NODE`, which `test/integration/run.js` clears.
+Running from a VS Code terminal puts `VSCODE_*` variables and `ELECTRON_RUN_AS_NODE` in the environment; the test
+runners strip them (`cleanEnv` in `test/integration/common.js`). One of them, `VSCODE_IPC_HOOK_CLI`, makes the `code`
+command forward to the VS Code of that terminal: **never run `code --install-extension` (or any `code` CLI command)
+from here without stripping them first**, or it installs into the developer's own VS Code.
 
 ## Architecture
 
@@ -60,14 +68,28 @@ the UI side.
 - **No runtime dependencies.** `devDependencies` only. A new runtime dependency needs a reason in the PR.
 - **The only hosts contacted** are `api.anthropic.com` (usage) and, when renewal is on, `console.anthropic.com`. No
   telemetry. `README.md` ("Privacy and security") says so; change one, change the other.
+- **Only a test host may redirect those hosts, and only to the loopback.** `TEST_ENV` (`claude.ts`) names the
+  environment variables the integration test sets to point the extension at its fake API; `extension.ts` reads them only
+  when `context.extensionMode === Test`, and `testOverrides` throws on any URL that is not `http://` on `127.0.0.1`,
+  `localhost` or `[::1]`. The installed extension has no setting or variable that changes where a token goes. The same
+  rule holds for `activate()`'s return value (`TestApi`): `undefined` in Production.
 - Anything shown from an error goes through `escapeMarkdown` (the tooltip is trusted Markdown with command links).
 - Windows and macOS are first-class: no shell-outs except `security` through `execFile` (no shell), paths through
   `path`, and no assumption about file modes (`chmod` is a no-op on Windows).
 
 ## Tests
 
-`test/unit/` mirrors `src/` and `scripts/` (run against the compiled `out/`); `test/integration/` is the real-VS-Code
-smoke test (`suite.js` runs inside VS Code with no framework). A change to `claude.ts`, `state.ts` or `view.ts` comes with
+`test/unit/` mirrors `src/` and `scripts/` (run against the compiled `out/`). `test/integration/` is the real-VS-Code test:
+`run.js` starts VS Code with a throwaway HOME and a fake Claude API (`fake-api.js`, steered over HTTP by the suite), and
+`suite.js` runs inside the extension host with no framework, walking the one live extension through the states the API
+can put it in (no login, 200, 429, 401, 500, renewal) and reading the status-bar item through `TestApi`. It writes fake
+logins only inside the throwaway HOME (`assertThrowaway` in `common.js`). `test/ui/` installs the packaged `.vsix` (a
+Production build: no DEV marker, no `TestApi`, so only states that need no network: no login and an expired one) and
+drives the real window with `playwright-core`, a dev dependency. `test/ui/Dockerfile` is the clean room for both.
+`test/live/` is not a test but the same pieces made to look at: `scripts/run.sh` starts `compose.yml` (code-server with the
+packaged `.vsix`, and `mock/`, the fake API over TLS under the real hostnames as compose network aliases, trusted through
+`NODE_EXTRA_CA_CERTS`, plus a control page). The extension there is the unmodified Production build, so it needs none of the
+test seam. It shares nothing with the host but two loopback ports: never mount `~/.claude` into it. A change to `claude.ts`, `state.ts` or `view.ts` comes with
 a test; the coverage gate in CI fails below the thresholds. There is no linter: `tsc` in strict mode is the static check.
 
 ## Conventions
@@ -86,7 +108,8 @@ it instead of improvising. Never add a `Co-Authored-By` trailer.
 
 - `.github/workflows/test.yaml`: on every PR and before every release. Typecheck and unit tests on Linux, macOS and Windows;
   on Linux also the coverage gate, the package-contents check and `npm audit` (high and up); and the integration test in
-  a real VS Code (1.85.0 and stable on Linux, stable on macOS and Windows).
+  a real VS Code (1.85.0 and stable on Linux, stable on macOS and Windows), and the UI test of the packaged `.vsix` on
+  Linux only (the Docker image is a local convenience, not a CI path).
 - `.github/workflows/ci.yml`: on PRs to `main`: `package.json`'s version matches the top `CHANGELOG.md` entry, and a change to
   `src/` or `package.json` has a version no release has used and a changelog entry (`scripts/release-metadata.js`); every
   commit is a conventional one-liner (`scripts/check-commit-message.js`); the pre-commit hygiene hooks; `actionlint` over

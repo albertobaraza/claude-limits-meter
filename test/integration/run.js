@@ -5,46 +5,42 @@
 //
 // VS Code is downloaded into .vscode-test/ the first time. On Linux without a display, wrap the
 // command in `xvfb-run -a`. The profile, the extensions folder and HOME are throwaway, so the run
-// never touches your settings or your Claude login (and makes no network call, having no login).
+// never touches your settings or your Claude login, and the suite writes a fake login into that HOME.
+// The only network is a fake of the Claude API on the loopback (fake-api.js): the extension is pointed at
+// it through TEST_ENV, which it honours only in a test host.
 
-const fs = require("node:fs");
-const os = require("node:os");
 const path = require("node:path");
 const { runTests } = require("@vscode/test-electron");
+const { TEST_ENV } = require("../../out/claude.js");
+const { homeEnv, launchArgs, makeScratch, scrubProcessEnv } = require("./common");
+const { startFakeApi } = require("./fake-api");
 
 async function main() {
-  // Set by VS Code's own terminals (and anything launched from them): it would make the VS Code
-  // started below behave as plain Node and try to run the workspace path as a script.
-  delete process.env.ELECTRON_RUN_AS_NODE;
+  // Set by VS Code's own terminals (and anything launched from them): ELECTRON_RUN_AS_NODE would make the VS Code
+  // started below behave as plain Node and try to run the workspace path as a script, and the VSCODE_* ones tie it to the
+  // VS Code of that terminal.
+  scrubProcessEnv();
 
   const root = path.resolve(__dirname, "..", "..");
-  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "claude-usage-it-"));
-  const home = path.join(scratch, "home");
-  const workspace = path.join(scratch, "workspace");
-  fs.mkdirSync(home);
-  fs.mkdirSync(workspace);
+  const scratch = makeScratch();
+  const api = await startFakeApi();
 
   try {
     await runTests({
       version: process.env.VSCODE_VERSION || "stable",
       extensionDevelopmentPath: root,
       extensionTestsPath: path.join(__dirname, "suite.js"),
-      extensionTestsEnv: { HOME: home, USERPROFILE: home },
-      launchArgs: [
-        workspace,
-        "--disable-extensions",
-        "--disable-workspace-trust",
-        "--user-data-dir",
-        path.join(scratch, "user-data"),
-        "--extensions-dir",
-        path.join(scratch, "extensions"),
-        // The throwaway HOME has no login keychain, and on macOS Electron may then wait on a Keychain
-        // prompt nobody can answer (the CI run hung there). The mock keychain keeps it off the real one.
-        ...(process.platform === "darwin" ? ["--use-mock-keychain"] : []),
-      ],
+      extensionTestsEnv: {
+        ...homeEnv(scratch),
+        [TEST_ENV.usageUrl]: api.usageUrl,
+        [TEST_ENV.tokenUrl]: api.tokenUrl,
+        [TEST_ENV.noKeychain]: "1", // on macOS, never ask the real Keychain for a login
+      },
+      launchArgs: [...launchArgs(scratch), "--disable-extensions"],
     });
   } finally {
-    fs.rmSync(scratch, { recursive: true, force: true });
+    await api.close();
+    scratch.dispose();
   }
 }
 

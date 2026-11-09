@@ -1,0 +1,59 @@
+# The live environment (scripts/run.sh): VS Code in a browser with the packaged extension, and a mock Claude it asks.
+#
+#   vscode  code-server on http://localhost:8788, the extension installed from a .vsix built from this checkout
+#   mock    stands in for api.anthropic.com and console.anthropic.com, with a control page on http://localhost:4010
+#
+# The extension is the release build and is not told anything: it asks https://api.anthropic.com, which on this
+# network is the mock (a network alias), over TLS with a certificate the mock makes at every start and the VS Code container is
+# told to trust. Nothing here can reach Anthropic or see your Claude login: there is no mount of the host at all, only
+# two volumes between the containers, one for the mock's public certificate and one for a fake login.
+
+name: claude-limits-meter-live
+
+services:
+  mock:
+    build:
+      context: ../..
+      dockerfile: test/live/mock.Dockerfile
+    environment:
+      MOCK_VSCODE_URL: http://localhost:${VSCODE_PORT:-8788}
+    networks:
+      default:
+        aliases:
+          - api.anthropic.com
+          - console.anthropic.com
+    volumes:
+      - shared-certs:/shared-certs
+      - claude-home:/claude
+    ports:
+      - "127.0.0.1:${MOCK_PORT:-4010}:4010"
+    healthcheck:
+      test: ["CMD", "bash", "-c", "test -f /shared-certs/ca.pem && node -e \"fetch('http://127.0.0.1:4010/__control/log').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))\""]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  vscode:
+    build:
+      context: ../..
+      dockerfile: test/live/vscode.Dockerfile
+    environment:
+      # Node reads this once, at start: the mock's certificate authority is trusted by the extension host.
+      NODE_EXTRA_CA_CERTS: /shared-certs/ca.pem
+    volumes:
+      - shared-certs:/shared-certs:ro
+      - claude-home:/home/coder/.claude
+    ports:
+      - "127.0.0.1:${VSCODE_PORT:-8788}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/healthz"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+    depends_on:
+      mock:
+        condition: service_healthy
+
+volumes:
+  shared-certs:
+  claude-home:

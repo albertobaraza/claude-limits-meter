@@ -73,7 +73,7 @@ The usage endpoint answers `429` when it is asked too often, for example by clic
 
 ## Privacy and security
 
-- Reads your Claude Code login (file or Keychain) and sends the **access token only to `api.anthropic.com`** to read your usage. With token refresh switched on it also contacts `console.anthropic.com`. Nothing else is contacted, and there is no telemetry.
+- Reads your Claude Code login (file or Keychain) and sends the **access token only to `api.anthropic.com`** to read your usage. With token refresh switched on it also contacts `console.anthropic.com`. Nothing else is contacted, and there is no telemetry. No setting or environment variable of the installed extension changes where your token is sent (only a VS Code test host can point it at a fake API, and only one on your own machine).
 - Never writes your login unless you enable `refreshExpiredToken`, and then only in the credentials file.
 - No runtime dependencies, so there is no third-party code in the extension.
 - *Open Credentials File* shows the file in an editor. It contains live tokens, so be careful about screen sharing.
@@ -84,11 +84,17 @@ The usage endpoint answers `429` when it is asked too often, for example by clic
 bash scripts/setup.sh                    # dependencies and git hooks
 npm test                                 # unit tests (node:test, no VS Code needed)
 npm run test:coverage                    # the same, with the coverage gate CI enforces
-xvfb-run -a npm run test:integration     # loads the extension in a real VS Code (no xvfb-run off Linux)
+xvfb-run -a npm run test:integration     # loads the extension in a real VS Code, against a fake Claude API (no xvfb-run off Linux)
+xvfb-run -a -s "-screen 0 1280x800x24" npm run test:ui   # installs the .vsix and checks what the real window shows
+npm run test:integration:docker          # both of those in a clean Linux container
 npm run package                          # builds the .vsix
+./scripts/run.sh                         # VS Code in your browser with the extension, asking a mock Claude you steer from a web page (Docker)
 ```
 
-Press **F5** in VS Code to run the extension in a development window. The logic that does not need VS Code lives in
+Press **F5** in VS Code to run the extension in a development window, or run `./scripts/run.sh` to try it against a mock Claude
+in Docker: a VS Code on http://localhost:8788 with the packaged extension, and a control page on http://localhost:4010 where you
+change what the usage API answers (a reading, 429, 401, 500) and the login on the machine, and watch the status bar react.
+Nothing real is involved: no Claude login and no call to Anthropic. The logic that does not need VS Code lives in
 `src/claude.ts`, `src/state.ts` and `src/view.ts` and is unit-tested; `src/extension.ts` is only the status-bar glue.
 
 Contributions go through pull requests (nothing is pushed to `main`); [CONTRIBUTING.md](CONTRIBUTING.md) has the branch,
