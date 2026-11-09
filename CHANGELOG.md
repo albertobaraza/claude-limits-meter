@@ -10,6 +10,7 @@ All notable changes to this extension are documented here, following
 
 - A new setting, `claudeLimitsMeter.showWeekly`, to show the 7-day weekly usage next to the 5-hour session in the status bar (for example `5h 42% · 7d 18%`). It is off by default, so the status bar still shows the 5-hour session alone until you turn it on, and it takes effect right away.
 - A **Settings** entry in the click menu and a **Settings** link in the hover open this extension's settings. The same is available from the command palette as *Claude Limits Meter: Open Settings*.
+- An icon for the extension, shown on its Marketplace page and in the Extensions view.
 
 ## [0.3.1] - 2026-11-09
 
