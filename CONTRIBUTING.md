@@ -122,7 +122,7 @@ listing) by itself. [docs/RELEASING.md](docs/RELEASING.md) has the details and h
 Open a pull request against `main` using the [`pr`](.claude/skills/pr) skill (or by hand). CI runs automatically:
 
 - [`test.yaml`](.github/workflows/test.yaml): typecheck and unit tests on Linux, macOS and Windows, the coverage gate,
-  the package check, `npm audit`, the integration test in VS Code 1.85.0 and stable, and the UI test of the packaged
+  the package check, `npm audit`, the integration test in VS Code 1.125.0 and stable, and the UI test of the packaged
   `.vsix` on Linux (screenshots are kept as a build artifact).
 - [`ci.yml`](.github/workflows/ci.yml): release metadata, commit messages, file hygiene, `actionlint` on the workflows,
   and Gitleaks over the full history.

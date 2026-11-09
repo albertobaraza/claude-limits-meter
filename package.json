@@ -2,7 +2,7 @@
   "name": "claude-limits-meter",
   "displayName": "Claude Limits Meter",
   "description": "Unofficial: shows your Claude Code usage (5-hour session and 7-day weekly limits) in the VS Code status bar. Works on Linux, macOS, Windows, WSL and remote hosts. Thanks to Claude Usage Bar by Harsh Agarwal, whose source helped.",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "publisher": "albertobaraza",
   "icon": "images/icon.png",
   "license": "MIT",
@@ -23,7 +23,7 @@
     "anthropic"
   ],
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.125.0"
   },
   "categories": [
     "Other"
@@ -96,8 +96,8 @@
     "smoke": "npm run compile && node scripts/smoke.js"
   },
   "devDependencies": {
-    "@types/node": "^18.19.130",
-    "@types/vscode": "^1.85.0",
+    "@types/node": "^24.19.2",
+    "@types/vscode": "^1.125.0",
     "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^4.1.0",
     "playwright-core": "^1.65.0",
