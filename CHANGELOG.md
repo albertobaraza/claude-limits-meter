@@ -4,6 +4,12 @@ All notable changes to this extension are documented here, following
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-11-09
+
+### Changed
+
+- The extension now needs VS Code 1.125 or newer (it was 1.85). On an older VS Code, either update VS Code or stay on 0.4.0.
+
 ## [0.4.0] - 2026-11-09
 
 ### Added
