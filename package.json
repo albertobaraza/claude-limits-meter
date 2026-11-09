@@ -23,7 +23,7 @@
     "anthropic"
   ],
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.125.0"
   },
   "categories": [
     "Other"
@@ -96,8 +96,8 @@
     "smoke": "npm run compile && node scripts/smoke.js"
   },
   "devDependencies": {
-    "@types/node": "^18.19.130",
-    "@types/vscode": "^1.85.0",
+    "@types/node": "^24.19.2",
+    "@types/vscode": "^1.125.0",
     "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^4.1.0",
     "playwright-core": "^1.65.0",
