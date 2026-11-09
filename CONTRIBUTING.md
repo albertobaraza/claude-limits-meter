@@ -10,7 +10,8 @@ bash scripts/setup.sh
 ```
 
 It checks Node (22+), installs the dependencies and, if [pre-commit](https://pre-commit.com) is installed
-(`pipx install pre-commit`), the git hooks below. Press **F5** in VS Code to run the extension in a development window.
+(`pipx install pre-commit`), the git hooks below. Press **F5** in VS Code to run the extension in a development window, or run `./scripts/run.sh` (Docker) to watch it in a
+VS Code in your browser against a mock Claude that you steer from a web page: no login and no network needed.
 
 ## Branching
 

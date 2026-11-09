@@ -88,9 +88,13 @@ xvfb-run -a npm run test:integration     # loads the extension in a real VS Code
 xvfb-run -a -s "-screen 0 1280x800x24" npm run test:ui   # installs the .vsix and checks what the real window shows
 npm run test:integration:docker          # both of those in a clean Linux container
 npm run package                          # builds the .vsix
+./scripts/run.sh                         # VS Code in your browser with the extension, asking a mock Claude you steer from a web page (Docker)
 ```
 
-Press **F5** in VS Code to run the extension in a development window. The logic that does not need VS Code lives in
+Press **F5** in VS Code to run the extension in a development window, or run `./scripts/run.sh` to try it against a mock Claude
+in Docker: a VS Code on http://localhost:8788 with the packaged extension, and a control page on http://localhost:4010 where you
+change what the usage API answers (a reading, 429, 401, 500) and the login on the machine, and watch the status bar react.
+Nothing real is involved: no Claude login and no call to Anthropic. The logic that does not need VS Code lives in
 `src/claude.ts`, `src/state.ts` and `src/view.ts` and is unit-tested; `src/extension.ts` is only the status-bar glue.
 
 Contributions go through pull requests (nothing is pushed to `main`); [CONTRIBUTING.md](CONTRIBUTING.md) has the branch,

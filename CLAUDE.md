@@ -30,6 +30,8 @@ xvfb-run -a -s "-screen 0 1280x800x24" npm run test:ui   # installs the packaged
                                                          # (Playwright); screenshots in .vscode-test/screenshots
 npm run test:integration:docker        # both of the above in a clean Linux container (no mounts, so no login to see)
 npm run package            # builds claude-limits-meter-<version>.vsix
+./scripts/run.sh           # the live environment: VS Code in a browser (:8788) with the packaged extension, and a mock
+                           # Claude (:4010) with a control page; Ctrl+C stops it. Blocks: run it in the background.
 ```
 
 To see a change working, open the folder in VS Code and press **F5** (`.vscode/launch.json`), or use the `run` skill.
@@ -83,7 +85,11 @@ the UI side.
 can put it in (no login, 200, 429, 401, 500, renewal) and reading the status-bar item through `TestApi`. It writes fake
 logins only inside the throwaway HOME (`assertThrowaway` in `common.js`). `test/ui/` installs the packaged `.vsix` (a
 Production build: no DEV marker, no `TestApi`, so only states that need no network: no login and an expired one) and
-drives the real window with `playwright-core`, a dev dependency. `test/ui/Dockerfile` is the clean room for both. A change to `claude.ts`, `state.ts` or `view.ts` comes with
+drives the real window with `playwright-core`, a dev dependency. `test/ui/Dockerfile` is the clean room for both.
+`test/live/` is not a test but the same pieces made to look at: `scripts/run.sh` starts `compose.yml` (code-server with the
+packaged `.vsix`, and `mock/`, the fake API over TLS under the real hostnames as compose network aliases, trusted through
+`NODE_EXTRA_CA_CERTS`, plus a control page). The extension there is the unmodified Production build, so it needs none of the
+test seam. It shares nothing with the host but two loopback ports: never mount `~/.claude` into it. A change to `claude.ts`, `state.ts` or `view.ts` comes with
 a test; the coverage gate in CI fails below the thresholds. There is no linter: `tsc` in strict mode is the static check.
 
 ## Conventions
