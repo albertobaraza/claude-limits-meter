@@ -32,8 +32,8 @@ On macOS the first read may show a system prompt asking whether `security` may u
 Not on the Marketplace yet. Build and install the `.vsix` yourself:
 
 ```bash
-git clone https://github.com/albertobaraza/claude-usage-statusbar.git
-cd claude-usage-statusbar
+git clone https://github.com/albertobaraza/claude-limits-meter.git
+cd claude-limits-meter
 npm ci
 npm run package                 # produces claude-limits-meter-<version>.vsix
 code --install-extension claude-limits-meter-*.vsix

@@ -7,12 +7,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/albertobaraza/claude-usage-statusbar.git"
+    "url": "https://github.com/albertobaraza/claude-limits-meter.git"
   },
   "bugs": {
-    "url": "https://github.com/albertobaraza/claude-usage-statusbar/issues"
+    "url": "https://github.com/albertobaraza/claude-limits-meter/issues"
   },
-  "homepage": "https://github.com/albertobaraza/claude-usage-statusbar#readme",
+  "homepage": "https://github.com/albertobaraza/claude-limits-meter#readme",
   "keywords": [
     "claude",
     "claude code",
