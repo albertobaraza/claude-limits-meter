@@ -1,7 +1,7 @@
 // Starts a real VS Code with this extension loaded and runs suite.js inside it.
 //
 //   npm run test:integration                       latest stable VS Code
-//   VSCODE_VERSION=1.85.0 npm run test:integration the oldest version package.json promises
+//   VSCODE_VERSION=1.125.0 npm run test:integration the oldest version package.json promises
 //
 // VS Code is downloaded into .vscode-test/ the first time. On Linux without a display, wrap the
 // command in `xvfb-run -a`. The profile, the extensions folder and HOME are throwaway, so the run

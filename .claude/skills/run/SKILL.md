@@ -23,7 +23,7 @@ changed the endpoint. It makes one request to `api.anthropic.com`, as the extens
 
 ```bash
 xvfb-run -a npm run test:integration                      # latest stable VS Code
-VSCODE_VERSION=1.85.0 xvfb-run -a npm run test:integration   # the oldest version package.json promises
+VSCODE_VERSION=1.125.0 xvfb-run -a npm run test:integration   # the oldest version package.json promises
 ```
 
 Downloads VS Code into `.vscode-test/` the first time (~350 MB, gitignored). Runs in a throwaway profile with an empty `HOME`,

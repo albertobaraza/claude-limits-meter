@@ -59,7 +59,7 @@ jobs:
         run: npm audit --audit-level=high
 
   # The extension loaded into a real VS Code: it activates, registers its commands and has its
-  # settings. 1.85.0 is the oldest version package.json promises ("engines"), stable is today's.
+  # settings. 1.125.0 is the oldest version package.json promises ("engines"), stable is today's.
   integration:
     name: VS Code ${{ matrix.vscode }} (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -69,7 +69,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest, vscode: "1.85.0" }
+          - { os: ubuntu-latest, vscode: "1.125.0" }
           - { os: ubuntu-latest, vscode: stable }
           - { os: macos-latest, vscode: stable }
           - { os: windows-latest, vscode: stable }

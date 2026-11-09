@@ -22,7 +22,7 @@ The jobs, and the command that reproduces each one locally:
 | Unit tests (ubuntu): coverage gate | `npm run test:coverage` |
 | Unit tests (ubuntu): package contents | `npm run test:package` |
 | Unit tests (ubuntu): audit | `npm audit --audit-level=high` |
-| VS Code 1.85.0 / stable | `xvfb-run -a npm run test:integration` (`VSCODE_VERSION=1.85.0` for the old one; no `xvfb-run` on macOS or Windows) |
+| VS Code 1.125.0 / stable | `xvfb-run -a npm run test:integration` (`VSCODE_VERSION=1.125.0` for the old one; no `xvfb-run` on macOS or Windows) |
 | Changelog & version | `node scripts/release-metadata.js check-changelog` and `... check-unreleased origin/main` |
 | Commit messages | `node scripts/check-commit-message.js --range origin/main..HEAD` |
 | File hygiene | `pre-commit run --all-files` |

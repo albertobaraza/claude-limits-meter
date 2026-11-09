@@ -3,7 +3,7 @@
 // for a reproducible local run; CI runs them on the native runners, where macOS and Windows are covered too.
 //
 //   npm run test:integration:docker
-//   VSCODE_VERSION=1.85.0 npm run test:integration:docker      the oldest VS Code package.json promises
+//   VSCODE_VERSION=1.125.0 npm run test:integration:docker      the oldest VS Code package.json promises
 //
 // The container is started with no mounts, so it can never see your ~/.claude. Screenshots are copied out of it to
 // .vscode-test/screenshots-docker. The image caches VS Code: run `docker build --no-cache` (or change

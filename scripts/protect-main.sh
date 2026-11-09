@@ -22,7 +22,7 @@ CHECKS=(
     "Unit tests (ubuntu-latest)"
     "Unit tests (macos-latest)"
     "Unit tests (windows-latest)"
-    "VS Code 1.85.0 (ubuntu-latest)"
+    "VS Code 1.125.0 (ubuntu-latest)"
     "VS Code stable (ubuntu-latest)"
     "VS Code stable (macos-latest)"
     "VS Code stable (windows-latest)"

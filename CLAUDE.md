@@ -25,7 +25,7 @@ npm test                   # unit tests (node:test, no VS Code needed); also wha
 npm run test:coverage      # the same with the coverage gate CI enforces (90% lines, 85% branches, 80% functions)
 npm run test:package       # what `vsce package` would ship: exactly the files it should, nothing else
 xvfb-run -a npm run test:integration   # loads the extension in a real VS Code against a fake Claude API (drop xvfb-run
-                                       # off Linux); VSCODE_VERSION=1.85.0 for the oldest supported version
+                                       # off Linux); VSCODE_VERSION=1.125.0 for the oldest supported version
 xvfb-run -a -s "-screen 0 1280x800x24" npm run test:ui   # installs the packaged .vsix and drives the real window
                                                          # (Playwright); screenshots in .vscode-test/screenshots
 npm run test:integration:docker        # both of the above in a clean Linux container (no mounts, so no login to see)
@@ -108,7 +108,7 @@ it instead of improvising. Never add a `Co-Authored-By` trailer.
 
 - `.github/workflows/test.yaml`: on every PR and before every release. Typecheck and unit tests on Linux, macOS and Windows;
   on Linux also the coverage gate, the package-contents check and `npm audit` (high and up); and the integration test in
-  a real VS Code (1.85.0 and stable on Linux, stable on macOS and Windows), and the UI test of the packaged `.vsix` on
+  a real VS Code (1.125.0 and stable on Linux, stable on macOS and Windows), and the UI test of the packaged `.vsix` on
   Linux only (the Docker image is a local convenience, not a CI path).
 - `.github/workflows/ci.yml`: on PRs to `main`: `package.json`'s version matches the top `CHANGELOG.md` entry, and a change to
   `src/` or `package.json` has a version no release has used and a changelog entry (`scripts/release-metadata.js`); every
