@@ -27,24 +27,24 @@ const checks = {
   },
 
   "settings are contributed with safe defaults"() {
-    const cfg = vscode.workspace.getConfiguration("claudeUsageStatusbar");
+    const cfg = vscode.workspace.getConfiguration("claudeLimitsMeter");
     assert.equal(cfg.get("pollIntervalSeconds"), 60);
     assert.equal(cfg.get("refreshExpiredToken"), false, "refreshing a login must stay opt-in");
     assert.equal(cfg.get("clientId"), "");
   },
 
   async "Refresh Now completes with no Claude login present"() {
-    await vscode.commands.executeCommand("claudeUsageStatusbar.refresh");
+    await vscode.commands.executeCommand("claudeLimitsMeter.refresh");
   },
 
   async "Open Credentials File completes when the file does not exist"() {
-    await vscode.commands.executeCommand("claudeUsageStatusbar.openCredentials");
+    await vscode.commands.executeCommand("claudeLimitsMeter.openCredentials");
   },
 
   async "changing the poll interval is accepted"() {
-    const cfg = vscode.workspace.getConfiguration("claudeUsageStatusbar");
+    const cfg = vscode.workspace.getConfiguration("claudeLimitsMeter");
     await cfg.update("pollIntervalSeconds", 30, vscode.ConfigurationTarget.Workspace);
-    assert.equal(vscode.workspace.getConfiguration("claudeUsageStatusbar").get("pollIntervalSeconds"), 30);
+    assert.equal(vscode.workspace.getConfiguration("claudeLimitsMeter").get("pollIntervalSeconds"), 30);
   },
 };
 

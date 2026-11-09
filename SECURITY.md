@@ -4,7 +4,7 @@
 
 It reads your Claude Code login (`~/.claude/.credentials.json`, or the macOS Keychain item `Claude Code-credentials`)
 and sends the **access token only to `api.anthropic.com`** to read your usage. If you turn on
-`claudeUsageStatusbar.refreshExpiredToken` it also contacts `console.anthropic.com` and rewrites the credentials file.
+`claudeLimitsMeter.refreshExpiredToken` it also contacts `console.anthropic.com` and rewrites the credentials file.
 It has no runtime dependencies and no telemetry. The README's "Privacy and security" section is the authoritative list.
 
 ## Reporting a vulnerability
