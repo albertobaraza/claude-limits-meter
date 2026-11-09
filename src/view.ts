@@ -90,6 +90,14 @@ export function statusView(state: State, commands: Commands, now = Date.now()): 
   return { text, markdown };
 }
 
+/** The view of a development build (F5 or a test host), marked so it is not mistaken for the installed extension. */
+export function devView(view: StatusView): StatusView {
+  return {
+    text: `${view.text} DEV`,
+    markdown: `$(beaker) **Development build**, not the installed extension\n\n${view.markdown}`,
+  };
+}
+
 /** The line the menu adds under the usage when the state needs explaining (the hover has the same in Markdown). */
 function menuNotice(state: State, now: number): MenuEntry | undefined {
   switch (state.status) {

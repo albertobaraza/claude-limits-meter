@@ -38,7 +38,8 @@ code --extensionDevelopmentPath="$PWD"
 ```
 
 (or press **F5** in VS Code). A second window opens with the extension loaded and this machine's real login: the item shows
-`✦ <percent>` bottom right; hover for the tooltip, click for the menu. Reload it with *Developer: Reload Window* after a code
+`✦ <percent> DEV` bottom right on an orange background (any build that is not the installed one marks itself, so it cannot be
+mistaken for the installed extension); hover for the summary, click for the details. Reload it with *Developer: Reload Window* after a code
 change, or run `npm run watch` in another terminal. In WSL or a remote window, `code` opens the window on the Windows side
 and loads the extension from the remote, which is the case `extensionKind: workspace` exists for.
 

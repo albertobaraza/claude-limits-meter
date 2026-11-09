@@ -1,7 +1,7 @@
 // What each state looks like (src/view.ts): status-bar text, tooltip Markdown and the click menu.
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { statusView, menuEntries, escapeMarkdown, SETTINGS } = require("../../out/view.js");
+const { statusView, menuEntries, devView, escapeMarkdown, SETTINGS } = require("../../out/view.js");
 
 const NOW = Date.parse("2026-01-01T00:00:00Z");
 const COMMANDS = { refresh: "ext.refresh", openCredentials: "ext.openCreds" };
@@ -32,6 +32,15 @@ test("the hover is a short summary of both windows and when they were last check
   assert.match(markdown, /_Last checked 14:32_/);
   assert.doesNotMatch(markdown, /[█░⏱]/, "bars and reset times are in the click menu");
   assert.doesNotMatch(markdown, /```/);
+});
+
+test("a development build marks the text and the tooltip, and keeps everything else", () => {
+  const plain = view({ status: "ok", snapshot: SNAPSHOT });
+  const dev = devView(plain);
+  assert.equal(dev.text, "$(sparkle) 42% DEV");
+  assert.match(dev.markdown, /^\$\(beaker\) \*\*Development build\*\*, not the installed extension\n\n/);
+  assert.ok(dev.markdown.endsWith(plain.markdown), "the tooltip is the normal one underneath");
+  assert.equal(plain.text, "$(sparkle) 42%", "devView does not change its input");
 });
 
 test("loading", () => {
