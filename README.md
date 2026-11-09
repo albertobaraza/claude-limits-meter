@@ -15,7 +15,7 @@ Weekly (7d)   ██░░░░░░░░ 18%   ⏱ 4d 2h
 Last checked  14:32
 ```
 
-Hover the status bar item for a short summary of both windows. Click it for the details (a bar and the time until each window resets, and when the usage was last checked), plus **Refresh Now** and **Open Credentials File**. It is deliberately minimal.
+Hover the status bar item for a short summary of both windows. Click it for the details (a bar and the time until each window resets, and when the usage was last checked), plus **Refresh Now**, **Open Credentials File** and **Settings** (this extension's settings). It is deliberately minimal.
 
 ## Platforms
 
@@ -63,7 +63,7 @@ It never writes to the macOS Keychain, so the option has no effect on a Keychain
 | `claudeLimitsMeter.refreshExpiredToken` | `false` | See above. |
 | `claudeLimitsMeter.clientId` | `""` | OAuth client id for the option above; empty means auto-detect. |
 
-Commands: *Claude Limits Meter: Show Menu*, *Refresh Now*, *Open Credentials File*.
+Commands: *Claude Limits Meter: Show Menu*, *Refresh Now*, *Open Credentials File*, *Open Settings*.
 
 ## When Claude rate limits the bar
 

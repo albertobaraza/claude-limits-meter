@@ -24,13 +24,14 @@ export interface MenuEntry {
   /** A second, longer line under the label. */
   detail?: string;
   /** Picking the entry runs this; entries without one are informational. */
-  action?: "refresh" | "openCredentials";
+  action?: "refresh" | "openCredentials" | "openSettings";
   separator?: true;
 }
 
 export interface Commands {
   refresh: string;
   openCredentials: string;
+  openSettings: string;
 }
 
 /** The hover's summary of the two windows: the percentages only; bars and reset times are in the click menu. */
@@ -103,7 +104,7 @@ export function statusView(
   ) {
     markdown += `\n\n${summaryLine(state.snapshot)}\n\n_Last checked ${clockTime(state.snapshot.checkedAt)}_`;
   }
-  markdown += `\n\n[Refresh Now](command:${commands.refresh}) · [Open Credentials File](command:${commands.openCredentials})`;
+  markdown += `\n\n[Refresh Now](command:${commands.refresh}) · [Open Credentials File](command:${commands.openCredentials}) · [Settings](command:${commands.openSettings})`;
   return { text, markdown };
 }
 
@@ -162,6 +163,7 @@ export function menuEntries(state: State, now = Date.now()): MenuEntry[] {
     { label: "", separator: true },
     { label: "$(refresh) Refresh Now", action: "refresh" },
     { label: "$(key) Open Credentials File", action: "openCredentials" },
+    { label: "$(gear) Settings", action: "openSettings" },
   );
   return entries;
 }

@@ -100,6 +100,10 @@ const checks = {
     await vscode.commands.executeCommand("claudeLimitsMeter.openCredentials");
   },
 
+  async "Open Settings completes"() {
+    await vscode.commands.executeCommand("claudeLimitsMeter.openSettings");
+  },
+
   // ── a login, and the states the API puts the item in ──
 
   async "a reading shows the session on the bar and both windows in the tooltip"() {

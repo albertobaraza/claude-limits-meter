@@ -47,6 +47,10 @@
       {
         "command": "claudeLimitsMeter.openCredentials",
         "title": "Claude Limits Meter: Open Credentials File"
+      },
+      {
+        "command": "claudeLimitsMeter.openSettings",
+        "title": "Claude Limits Meter: Open Settings"
       }
     ],
     "configuration": {
