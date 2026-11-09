@@ -4,6 +4,17 @@ All notable changes to this extension are documented here, following
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-11-09
+
+### Added
+
+- A "Last checked" time (for example `14:32`) in the hover and in the click menu, so you can tell how old the numbers are, for instance after a failed check.
+- The click menu now explains the state in plain words when there is no Claude Code login, the token has expired, Claude is rate limiting the bar, or a check failed with an error.
+
+### Changed
+
+- Hovering the status bar item now shows a short summary of the 5-hour session and the week. The bars and the time until each limit resets moved to the click menu.
+
 ## [0.2.0] - 2026-11-09
 
 ### Changed
