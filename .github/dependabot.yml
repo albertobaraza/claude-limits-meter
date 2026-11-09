@@ -30,3 +30,9 @@ updates:
       # The version of @types/vscode may not be newer than "engines.vscode" in package.json (vsce refuses to
       # package otherwise), so it moves by hand, together with that minimum.
       - dependency-name: "@types/vscode"
+      # The extension runs in the Node of the VS Code it is installed in, so @types/node stays on the major
+      # that the oldest supported VS Code ("engines.vscode") ships: a newer major would let the typecheck
+      # accept APIs that do not exist there. Patch and minor updates still arrive; the major moves by hand,
+      # together with that minimum.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
