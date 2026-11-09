@@ -4,6 +4,13 @@ All notable changes to this extension are documented here, following
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-11-09
+
+### Changed
+
+- The settings and commands now start with `claudeLimitsMeter.` instead of `claudeUsageStatusbar.`, to match the extension's name. The old names are no longer read: if you set `claudeUsageStatusbar.pollIntervalSeconds`, `claudeUsageStatusbar.refreshExpiredToken` or `claudeUsageStatusbar.clientId` in your settings, or bound a key to one of its commands, rename them to `claudeLimitsMeter.*`.
+- The commands, the status bar item, the menu and the warnings are labelled "Claude Limits Meter" instead of "Claude Usage".
+
 ## [0.1.2] - 2026-11-07
 
 ### Fixed
