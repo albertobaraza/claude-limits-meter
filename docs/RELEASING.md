@@ -26,7 +26,7 @@ token to create, store or renew.
 1. **Publisher.** The `publisher` in `package.json` (`albertobaraza`) must be one you own at
    <https://marketplace.visualstudio.com/manage>.
 2. **Policy.** On that publisher open the *Trusted Publishing* tab > *Create*: Provider *GitHub Actions*, Repository
-   owner `albertobaraza`, Repository `claude-usage-statusbar`, Workflow `release.yaml` (the file holding the `publish`
+   owner `albertobaraza`, Repository `claude-limits-meter`, Workflow `release.yaml` (the file holding the `publish`
    job), Environment empty. If you fill the environment in, the `publish` job must declare the same `environment:`.
 3. **Switch publishing on:**
 

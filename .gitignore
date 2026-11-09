@@ -2,3 +2,6 @@ node_modules/
 out/
 *.vsix
 .vscode-test/
+
+# Local backlog, not meant to be shared or reviewed; see the `todo` skill.
+/TODO.md

@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mock Claude</title>
+<style>
+  :root { --bg: #fff; --fg: #1f2328; --muted: #656d76; --line: #d0d7de; --card: #f6f8fa; --accent: #0969da; --ok: #1a7f37; --bad: #cf222e; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0d1117; --fg: #e6edf3; --muted: #8b949e; --line: #30363d; --card: #161b22; --accent: #58a6ff; --ok: #3fb950; --bad: #f85149; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0 auto; max-width: 52rem; padding: 1.5rem 16px 3rem; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; }
+  h1 { font-size: 1.3rem; margin: 0 0 .25rem; }
+  h2 { font-size: 1rem; margin: 0 0 .75rem; }
+  p { margin: .25rem 0 1rem; color: var(--muted); }
+  a { color: var(--accent); }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+  .row { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: end; margin-bottom: .75rem; }
+  label { display: flex; flex-direction: column; font-size: .85rem; color: var(--muted); gap: .2rem; }
+  input { width: 7.5rem; padding: .35rem .5rem; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); font: inherit; }
+  button { padding: .4rem .8rem; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); font: inherit; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+  .now { color: var(--muted); font-size: .85rem; margin: 0; }
+  table { width: 100%; border-collapse: collapse; font-size: .85rem; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: .3rem .5rem; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); }
+</style>
+</head>
+<body>
+<h1>Mock Claude</h1>
+<p>Stands in for api.anthropic.com for the extension in <a href="__VSCODE_URL__" target="_blank" rel="noopener">VS Code (__VSCODE_URL__)</a>.
+   It checks every 15 s while that tab is focused; <em>Refresh Now</em> in its menu asks sooner (not twice within 10 s, and not while rate limited).</p>
+
+<section aria-labelledby="usage-h">
+  <h2 id="usage-h">What the usage endpoint answers</h2>
+  <div class="row">
+    <label>Session (5h) %<input id="five" type="number" min="0" max="100" value="42"></label>
+    <label>Week (7d) %<input id="seven" type="number" min="0" max="100" value="13"></label>
+    <label>Session resets in (min)<input id="fiveMin" type="number" min="0" value="150"></label>
+    <label>Week resets in (min)<input id="sevenMin" type="number" min="0" value="5760"></label>
+    <button data-answer="ok">200 · send this reading</button>
+  </div>
+  <div class="row">
+    <label>Retry-After (s)<input id="retry" type="number" min="5" value="20"></label>
+    <button data-answer="429">429 · rate limited</button>
+    <button data-answer="401">401 · token rejected</button>
+    <button data-answer="500">500 · server error</button>
+  </div>
+  <p class="now" id="answer-now" aria-live="polite"></p>
+  <p class="now">After a 429 the extension waits for the Retry-After (at least 5 s) before it asks again, and <em>Refresh Now</em> does not ask sooner: that is the behaviour being shown.</p>
+</section>
+
+<section aria-labelledby="login-h">
+  <h2 id="login-h">The Claude Code login on the machine</h2>
+  <div class="row">
+    <button data-login="valid">Valid</button>
+    <button data-login="expired">Expired</button>
+    <button data-login="none">None (not signed in)</button>
+  </div>
+  <p class="now" id="login-now" aria-live="polite"></p>
+  <p class="now">An expired login is renewed by the extension only when <code>claudeLimitsMeter.refreshExpiredToken</code> is on in VS Code (the client id is already set).</p>
+</section>
+
+<section aria-labelledby="log-h">
+  <h2 id="log-h">What the extension asked</h2>
+  <table>
+    <thead><tr><th>Time</th><th>Request</th><th>Token</th><th>Answered</th></tr></thead>
+    <tbody id="log"><tr><td colspan="4">Nothing yet.</td></tr></tbody>
+  </table>
+</section>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const put = (what, body) => fetch(`/__control/${what}`, { method: "PUT", body: JSON.stringify(body) });
+const number = (id) => Number($(id).value);
+
+const answers = {
+  ok: () => ({ status: 200, usage: { fiveHour: number("five"), sevenDay: number("seven"), fiveHourResetsInMinutes: number("fiveMin"), sevenDayResetsInMinutes: number("sevenMin") } }),
+  429: () => ({ status: 429, headers: { "retry-after": String(number("retry")) }, body: {} }),
+  401: () => ({ status: 401, body: {} }),
+  500: () => ({ status: 500, body: { error: "mock server error" } }),
+};
+
+document.querySelectorAll("[data-answer]").forEach((b) => b.addEventListener("click", async () => {
+  await put("script", answers[b.dataset.answer]());
+  refresh();
+}));
+document.querySelectorAll("[data-login]").forEach((b) => b.addEventListener("click", async () => {
+  await put("login", { mode: b.dataset.login });
+  refresh();
+}));
+
+const describe = (s) => s.usage ? `${s.status}: session ${s.usage.fiveHour}%, week ${s.usage.sevenDay}%`
+  : s.headers?.["retry-after"] ? `${s.status}, Retry-After ${s.headers["retry-after"]} s` : `${s.status}`;
+
+async function refresh() {
+  const [script, login, log] = await Promise.all(["script", "login", "log"].map((w) => fetch(`/__control/${w}`).then((r) => r.json())));
+  $("answer-now").textContent = `Answering now: ${describe(script)}`;
+  $("login-now").textContent = `Login now: ${login.mode}${login.renewed ? " (renewed by the extension)" : ""}`;
+  document.querySelectorAll("[data-login]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.login === login.mode)));
+  const rows = log.slice(-12).reverse().map((r) => {
+    const tr = document.createElement("tr");
+    const token = r.endpoint === "usage" ? (r.bearer === "fake-access-token" ? "login" : r.bearer === "fake-renewed-access-token" ? "renewed" : "other") : "refresh";
+    [new Date(r.at).toLocaleTimeString(), r.endpoint === "usage" ? "GET usage" : "POST token", token, r.answered].forEach((text, i) => {
+      const td = document.createElement("td");
+      td.textContent = text;
+      if (i === 3) td.className = r.answered < 400 ? "ok" : "bad";
+      tr.append(td);
+    });
+    return tr;
+  });
+  $("log").replaceChildren(...(rows.length ? rows : [Object.assign(document.createElement("tr"), { innerHTML: '<td colspan="4">Nothing yet.</td>' })]));
+}
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>

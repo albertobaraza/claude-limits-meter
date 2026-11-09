@@ -55,6 +55,45 @@ export function defaultOptions(
   };
 }
 
+/**
+ * What a test host may set to point the extension at a fake API. `extension.ts` reads them only when VS Code
+ * says it is running tests (`ExtensionMode.Test`); an installed extension never looks at them.
+ */
+export const TEST_ENV = {
+  usageUrl: "CLAUDE_LIMITS_METER_TEST_USAGE_URL",
+  tokenUrl: "CLAUDE_LIMITS_METER_TEST_TOKEN_URL",
+  /** Any non-empty value: never run `security`, so a test on macOS cannot read a real login. */
+  noKeychain: "CLAUDE_LIMITS_METER_TEST_NO_KEYCHAIN",
+} as const;
+
+/**
+ * An http URL on this machine's loopback, or a thrown error. Even in a test host the login can only be sent to
+ * a fake API on this machine, so the "only api.anthropic.com" promise holds however the environment is set.
+ */
+function loopbackUrl(name: string, value: string): string {
+  let url: URL | undefined;
+  try {
+    url = new URL(value);
+  } catch {
+    // reported below
+  }
+  if (!url || url.protocol !== "http:" || !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)) {
+    throw new Error(`${name} must be an http URL on 127.0.0.1, localhost or [::1]`);
+  }
+  return value;
+}
+
+/** The options a test host asks for through `TEST_ENV`; none when it asks for nothing. Throws on a URL that is not loopback. */
+export function testOverrides(env: NodeJS.ProcessEnv): Partial<Pick<ClaudeOptions, "usageUrl" | "tokenUrl" | "exec">> {
+  const out: Partial<Pick<ClaudeOptions, "usageUrl" | "tokenUrl" | "exec">> = {};
+  const usage = env[TEST_ENV.usageUrl];
+  const token = env[TEST_ENV.tokenUrl];
+  if (usage) out.usageUrl = loopbackUrl(TEST_ENV.usageUrl, usage);
+  if (token) out.tokenUrl = loopbackUrl(TEST_ENV.tokenUrl, token);
+  if (env[TEST_ENV.noKeychain]) out.exec = () => Promise.reject(new Error("the Keychain is switched off in tests"));
+  return out;
+}
+
 interface OAuthCreds {
   accessToken?: string;
   refreshToken?: string;
@@ -78,11 +117,41 @@ export type TokenResult =
   /** A login exists but its access token has expired and we may not (or cannot) renew it. */
   | { kind: "expired" };
 
-/** HTTP failure. Carries only the status, never the response body (could echo tokens). */
+/**
+ * HTTP failure. Carries only the status (and the server's retry hint), never the response body (could echo
+ * tokens).
+ */
 export class HttpError extends Error {
-  constructor(readonly status: number, what: string) {
+  constructor(
+    readonly status: number,
+    what: string,
+    /** How long the server asked us to wait (Retry-After), clamped, in milliseconds. */
+    readonly retryAfterMs?: number,
+  ) {
     super(`${what}: HTTP ${status}`);
   }
+}
+
+const RETRY_AFTER_MIN_MS = 5_000;
+const RETRY_AFTER_MAX_MS = 60 * 60_000;
+
+/**
+ * The Retry-After header as milliseconds: either a number of seconds or an HTTP date. Anything else is
+ * `undefined`; a value that is too small or large is clamped, so an odd header can neither make us spin nor
+ * park the bar for a day.
+ */
+export function parseRetryAfter(value: string | null | undefined, now = Date.now()): number | undefined {
+  const v = value?.trim();
+  if (!v) return undefined;
+  let ms: number;
+  if (/^\d+$/.test(v)) {
+    ms = Number(v) * 1000;
+  } else {
+    const date = Date.parse(v);
+    if (Number.isNaN(date)) return undefined;
+    ms = date - now;
+  }
+  return Math.min(Math.max(ms, RETRY_AFTER_MIN_MS), RETRY_AFTER_MAX_MS);
 }
 
 // ── reading credentials ──────────────────────────────────────────────────────
@@ -227,7 +296,7 @@ export class ClaudeClient {
       },
       signal: AbortSignal.timeout(10_000),
     });
-    if (!res.ok) throw new HttpError(res.status, "Usage fetch failed");
+    if (!res.ok) throw new HttpError(res.status, "Usage fetch failed", parseRetryAfter(res.headers.get("retry-after")));
     return (await res.json()) as Usage;
   }
 }
@@ -272,6 +341,12 @@ export function bar(pct: number, width = 10): string {
 
 export function pctText(p: number): string {
   return `${Math.trunc(p)}`.padStart(3) + "%";
+}
+
+/** "14:32": the local 24-hour clock time of an epoch-ms timestamp. */
+export function clockTime(at: number): string {
+  const d = new Date(at);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
 export function timeLeft(resetsAt: string | null | undefined, now = Date.now()): string {

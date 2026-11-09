@@ -279,8 +279,38 @@ test("fetchUsage sends the expected headers and parses the body", async () => {
 test("fetchUsage surfaces HTTP errors by status", async () => {
   const srv = await mockServer({ "/usage": json({}, 429) });
   const { client } = makeClient("unused", srv.base);
-  await assert.rejects(client.fetchUsage("TOK"), (e) => e instanceof c.HttpError && e.status === 429);
+  await assert.rejects(client.fetchUsage("TOK"), (e) => e instanceof c.HttpError && e.status === 429 && e.retryAfterMs === undefined);
   srv.close();
+});
+
+test("a 429 carries the server's Retry-After, and never its body", async () => {
+  const srv = await mockServer({
+    "/usage": (_, res) => {
+      res.statusCode = 429;
+      res.setHeader("retry-after", "90");
+      res.end("secret-body");
+    },
+  });
+  const { client } = makeClient("unused", srv.base);
+  await assert.rejects(client.fetchUsage("TOK"), (e) => {
+    assert.ok(e instanceof c.HttpError);
+    assert.equal(e.status, 429);
+    assert.equal(e.retryAfterMs, 90_000);
+    assert.ok(!e.message.includes("secret-body"));
+    return true;
+  });
+  srv.close();
+});
+
+test("parseRetryAfter reads seconds or an HTTP date, clamps them, and ignores anything else", () => {
+  const now = Date.parse("2026-01-01T00:00:00Z");
+  assert.equal(c.parseRetryAfter("90", now), 90_000);
+  assert.equal(c.parseRetryAfter(" 30 ", now), 30_000);
+  assert.equal(c.parseRetryAfter("Thu, 01 Jan 2026 00:03:00 GMT", now), 180_000);
+  assert.equal(c.parseRetryAfter("0", now), 5_000, "never a tight loop");
+  assert.equal(c.parseRetryAfter("Wed, 31 Dec 2025 23:00:00 GMT", now), 5_000, "a date in the past");
+  assert.equal(c.parseRetryAfter("999999", now), 3_600_000, "never parks the bar for hours");
+  for (const bad of [undefined, null, "", "soon"]) assert.equal(c.parseRetryAfter(bad, now), undefined, String(bad));
 });
 
 test("findClientId reads CLIENT_ID from the first extension dir that has it", async () => {
@@ -292,6 +322,12 @@ test("findClientId reads CLIENT_ID from the first extension dir that has it", as
 });
 
 // ── formatting ───────────────────────────────────────────────────────────────
+
+test("clockTime is the local 24-hour time, zero-padded", () => {
+  assert.equal(c.clockTime(new Date(2026, 0, 1, 14, 32, 59).getTime()), "14:32");
+  assert.equal(c.clockTime(new Date(2026, 0, 1, 0, 5).getTime()), "00:05");
+  assert.equal(c.clockTime(new Date(2026, 0, 1, 9, 0).getTime()), "09:00");
+});
 
 test("bar / pctText / timeLeft", () => {
   assert.equal(c.bar(0), "░░░░░░░░░░");
@@ -310,4 +346,47 @@ test("bar / pctText / timeLeft", () => {
   assert.equal(c.timeLeft(iso((4 * 24 + 2) * 3_600_000), NOW), "4d 2h");
   const micros = new Date(NOW + 90 * 60_000).toISOString().replace("Z", "123+00:00"); // API timestamps carry microseconds
   assert.equal(c.timeLeft(micros, NOW), "1h 30m");
+});
+
+// ── the test seam ────────────────────────────────────────────────────────────
+
+test("a test host can point the extension at a fake API on this machine", () => {
+  const over = c.testOverrides({
+    [c.TEST_ENV.usageUrl]: "http://127.0.0.1:4567/api/oauth/usage",
+    [c.TEST_ENV.tokenUrl]: "http://localhost:4567/v1/oauth/token",
+  });
+  assert.equal(over.usageUrl, "http://127.0.0.1:4567/api/oauth/usage");
+  assert.equal(over.tokenUrl, "http://localhost:4567/v1/oauth/token");
+  assert.equal(over.exec, undefined, "the Keychain is left alone unless asked");
+  assert.equal(c.testOverrides({ [c.TEST_ENV.usageUrl]: "http://[::1]:1/x" }).usageUrl, "http://[::1]:1/x");
+});
+
+test("with nothing set, the seam changes nothing", () => {
+  assert.deepEqual(c.testOverrides({}), {});
+  assert.deepEqual(c.testOverrides({ [c.TEST_ENV.usageUrl]: "", [c.TEST_ENV.noKeychain]: "" }), {}, "empty means unset");
+});
+
+test("the login can only be sent to the loopback, however the environment is set", () => {
+  for (const url of [
+    "https://api.anthropic.com/api/oauth/usage",
+    "http://api.anthropic.com/api/oauth/usage",
+    "https://127.0.0.1:4567/", // not http: the fake API does not speak TLS
+    "http://127.0.0.1.evil.example/",
+    "http://evil.example/?h=127.0.0.1",
+    "not a url",
+  ]) {
+    for (const name of [c.TEST_ENV.usageUrl, c.TEST_ENV.tokenUrl]) {
+      assert.throws(() => c.testOverrides({ [name]: url }), new RegExp(`${name} must be an http URL on 127.0.0.1`), url);
+    }
+  }
+});
+
+test("the Keychain switch makes `security` fail without running anything, so a test never reads a real login", async () => {
+  const srv = await mockServer();
+  const { exec } = c.testOverrides({ [c.TEST_ENV.noKeychain]: "1" });
+  const { client } = makeClient(tmpCreds(FRESH), srv.base, { platform: "darwin", exec });
+  const token = await client.getToken();
+  assert.deepEqual(token, { kind: "ok", token: FRESH.accessToken }, "falls through to the credentials file");
+  await assert.rejects(exec("security", ["find-generic-password"]), /switched off in tests/);
+  srv.close();
 });

@@ -1,0 +1,4 @@
+# What `docker build -f test/live/mock.Dockerfile .` leaves out of the build context: all but what the Dockerfile copies.
+*
+!test/integration/fake-api.js
+!test/live/mock

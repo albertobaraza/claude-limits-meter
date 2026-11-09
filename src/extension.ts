@@ -4,19 +4,35 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { CREDS_PATH, ClaudeClient, defaultOptions, findClientId } from "./claude";
-import { INITIAL_STATE, check, type State } from "./state";
-import { SETTINGS, menuEntries, statusView } from "./view";
+import { CREDS_PATH, ClaudeClient, defaultOptions, findClientId, testOverrides } from "./claude";
+import { INITIAL_STATE, check, nextPollDelay, refreshAllowedAt, retryAt, type State } from "./state";
+import { SETTINGS, devView, menuEntries, statusView } from "./view";
 
 const CMD_MENU = `${SETTINGS}.showMenu`;
 const CMD_REFRESH = `${SETTINGS}.refresh`;
 const CMD_OPEN_CREDS = `${SETTINGS}.openCredentials`;
+const CMD_OPEN_SETTINGS = `${SETTINGS}.openSettings`;
 
-export function activate(context: vscode.ExtensionContext) {
-  const log = vscode.window.createOutputChannel("Claude Usage Status Bar");
+/**
+ * What `activate()` hands to a test, outside the installed extension only: VS Code has no API to read a status-bar
+ * item, and the refresh command refuses to ask the API twice in 10 s, which a test that walks through the states must.
+ */
+export interface TestApi {
+  /** What the status-bar item shows right now. */
+  statusBar(): { text: string; tooltip: string; backgroundColor?: string };
+  /** Waits for a check in flight, then runs a fresh one and returns once its result is on screen. */
+  checkNow(): Promise<void>;
+}
+
+export function activate(context: vscode.ExtensionContext): TestApi | undefined {
+  // Anything but the installed extension (F5, --extensionDevelopmentPath, the test host) says so on screen.
+  const dev = context.extensionMode !== vscode.ExtensionMode.Production;
+  const name = dev ? "Claude Limits Meter (dev)" : "Claude Limits Meter";
+  const log = vscode.window.createOutputChannel(name);
   const item = vscode.window.createStatusBarItem(`${context.extension.id}.usage`, vscode.StatusBarAlignment.Right, 100);
-  item.name = "Claude Usage";
+  item.name = name;
   item.command = CMD_MENU;
+  if (dev) item.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground");
 
   let state: State = INITIAL_STATE;
   let inFlight: Promise<void> | undefined;
@@ -55,23 +71,27 @@ export function activate(context: vscode.ExtensionContext) {
     return id;
   }
 
-  const client = new ClaudeClient(
-    defaultOptions({
-      userAgent: `claude-usage-statusbar/${context.extension.packageJSON.version}`,
+  const client = new ClaudeClient({
+    ...defaultOptions({
+      userAgent: `claude-limits-meter/${context.extension.packageJSON.version}`,
       refreshEnabled: () => cfg().get<boolean>("refreshExpiredToken", false),
       clientId: resolveClientId,
       onWarn: (message) => {
         logLine(message);
-        void vscode.window.showWarningMessage(`Claude Usage: ${message}`);
+        void vscode.window.showWarningMessage(`Claude Limits Meter: ${message}`);
       },
     }),
-  );
+    // Only a test host (`--extensionTestsPath`) may redirect the API to a fake one; see TEST_ENV.
+    ...(context.extensionMode === vscode.ExtensionMode.Test ? testOverrides(process.env) : {}),
+  });
 
   // ── rendering ──
   function render() {
-    const view = statusView(state, { refresh: CMD_REFRESH, openCredentials: CMD_OPEN_CREDS });
+    const commands = { refresh: CMD_REFRESH, openCredentials: CMD_OPEN_CREDS, openSettings: CMD_OPEN_SETTINGS };
+    const plain = statusView(state, commands, Date.now(), { showWeekly: cfg().get<boolean>("showWeekly", false) });
+    const view = dev ? devView(plain) : plain;
     const tooltip = new vscode.MarkdownString(view.markdown, true);
-    tooltip.isTrusted = { enabledCommands: [CMD_REFRESH, CMD_OPEN_CREDS] };
+    tooltip.isTrusted = { enabledCommands: [CMD_REFRESH, CMD_OPEN_CREDS, CMD_OPEN_SETTINGS] };
     item.text = view.text;
     item.tooltip = tooltip;
   }
@@ -93,10 +113,19 @@ export function activate(context: vscode.ExtensionContext) {
     timer = setTimeout(async () => {
       if (vscode.window.state.focused) await poll(); // nobody is looking at an unfocused window
       schedule();
-    }, intervalMs());
+    }, nextPollDelay(state, intervalMs())); // longer than the interval while Claude is rate limiting us
   }
 
   async function refreshNow() {
+    // Clicking Refresh over and over must not hammer the API (it answers 429): within the minimum gap, or
+    // while rate limited, show what we have and say when the next real check can happen.
+    const waitMs = refreshAllowedAt(state, lastPollAt) - Date.now();
+    if (waitMs > 0) {
+      logLine(`Refresh skipped: the next request may be sent in ${Math.ceil(waitMs / 1000)}s`);
+      vscode.window.setStatusBarMessage(`Claude Limits Meter: next check in ${Math.ceil(waitMs / 1000)}s`, 3000);
+      render();
+      return;
+    }
     item.text = "$(sync~spin) …";
     await poll();
     schedule();
@@ -111,16 +140,22 @@ export function activate(context: vscode.ExtensionContext) {
     }
   }
 
+  /** The Settings editor, filtered to this extension's settings. */
+  async function openSettings() {
+    await vscode.commands.executeCommand("workbench.action.openSettings", `@ext:${context.extension.id}`);
+  }
+
   async function showMenu() {
-    const actions = { refresh: refreshNow, openCredentials };
+    const actions = { refresh: refreshNow, openCredentials, openSettings };
     type Item = vscode.QuickPickItem & { run?: () => unknown };
     const items: Item[] = menuEntries(state).map((e) => ({
       label: e.label,
       description: e.description,
+      detail: e.detail,
       kind: e.separator ? vscode.QuickPickItemKind.Separator : vscode.QuickPickItemKind.Default,
       run: e.action && actions[e.action],
     }));
-    const picked = await vscode.window.showQuickPick(items, { title: "Claude Usage", placeHolder: "Claude usage" });
+    const picked = await vscode.window.showQuickPick(items, { title: name, placeHolder: "Claude usage" });
     await picked?.run?.();
   }
 
@@ -131,12 +166,15 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand(CMD_MENU, showMenu),
     vscode.commands.registerCommand(CMD_REFRESH, refreshNow),
     vscode.commands.registerCommand(CMD_OPEN_CREDS, openCredentials),
+    vscode.commands.registerCommand(CMD_OPEN_SETTINGS, openSettings),
     vscode.window.onDidChangeWindowState((s) => {
       // catch up right away when the window comes back after skipped polls
-      if (s.focused && Date.now() - lastPollAt >= intervalMs()) void poll().then(schedule);
+      const now = Date.now();
+      if (s.focused && now - lastPollAt >= intervalMs() && now >= retryAt(state)) void poll().then(schedule);
     }),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration(`${SETTINGS}.pollIntervalSeconds`)) schedule();
+      if (e.affectsConfiguration(`${SETTINGS}.showWeekly`)) render();
       if (e.affectsConfiguration(`${SETTINGS}.refreshExpiredToken`)) void refreshNow();
     }),
   );
@@ -144,6 +182,20 @@ export function activate(context: vscode.ExtensionContext) {
   render();
   item.show();
   void poll().then(schedule);
+
+  if (!dev) return undefined;
+  return {
+    statusBar: () => ({
+      text: item.text,
+      tooltip: typeof item.tooltip === "string" ? item.tooltip : (item.tooltip?.value ?? ""),
+      // `id` is on every ThemeColor at runtime but missing from @types/vscode.
+      backgroundColor: (item.backgroundColor as { id?: string } | undefined)?.id,
+    }),
+    checkNow: async () => {
+      await inFlight;
+      await poll();
+    },
+  };
 }
 
 export function deactivate() {}

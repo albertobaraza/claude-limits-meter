@@ -1,0 +1,12 @@
+# What `docker build -f test/ui/Dockerfile .` leaves out of the image (BuildKit reads this file next to the Dockerfile).
+# The image installs its own dependencies and VS Code, and must never contain a login or a git history.
+.git
+.github
+.claude
+.vscode
+.vscode-test
+node_modules
+out
+*.vsix
+.env*
+TODO.md
