@@ -58,6 +58,11 @@
           "minimum": 15,
           "description": "Seconds between usage checks. Checks are skipped while the VS Code window is unfocused."
         },
+        "claudeLimitsMeter.showWeekly": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show the 7-day weekly usage next to the 5-hour session in the status bar (for example \"5h 42% · 7d 18%\"). Off shows the 5-hour session alone."
+        },
         "claudeLimitsMeter.refreshExpiredToken": {
           "type": "boolean",
           "default": false,

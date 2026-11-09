@@ -26,6 +26,23 @@ test("ok shows the 5-hour percentage, truncated, in the status bar", () => {
   assert.equal(view({ status: "ok", snapshot: SNAPSHOT }).text, "$(sparkle) 42%");
 });
 
+test("showWeekly puts the 7-day week next to the 5-hour session in the status-bar text", () => {
+  const both = (state) => statusView(state, COMMANDS, NOW, { showWeekly: true });
+  assert.equal(both({ status: "ok", snapshot: SNAPSHOT }).text, "$(sparkle) 5h 42% · 7d 18%");
+  assert.equal(both({ status: "rateLimited", snapshot: SNAPSHOT, retryAt: NOW + 1000 }).text, "$(clock) 5h 42% · 7d 18%");
+  assert.equal(both({ status: "rateLimited", retryAt: NOW + 1000 }).text, "$(clock) —", "no reading yet");
+  assert.equal(both({ status: "ok" }).text, "$(sparkle) 5h 0% · 7d 0%");
+  // The states that show a symbol instead of numbers are the same with the setting on.
+  for (const status of ["loading", "noCreds", "expired", "error"]) {
+    const state = { status, snapshot: SNAPSHOT, error: "x" };
+    assert.equal(both(state).text, view(state).text, status);
+  }
+  // Off is the default, whether the option is left out, empty or false, and the hover is the same either way.
+  assert.equal(statusView({ status: "ok", snapshot: SNAPSHOT }, COMMANDS, NOW, {}).text, "$(sparkle) 42%");
+  assert.equal(statusView({ status: "ok", snapshot: SNAPSHOT }, COMMANDS, NOW, { showWeekly: false }).text, "$(sparkle) 42%");
+  assert.equal(both({ status: "ok", snapshot: SNAPSHOT }).markdown, view({ status: "ok", snapshot: SNAPSHOT }).markdown);
+});
+
 test("the hover is a short summary of both windows and when they were last checked, with no bars", () => {
   const { markdown } = view({ status: "ok", snapshot: SNAPSHOT });
   assert.match(markdown, /Session \(5h\) \*\*42%\*\* · Weekly \(7d\) \*\*18%\*\*/);

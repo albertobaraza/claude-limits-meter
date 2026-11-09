@@ -13,6 +13,11 @@ export interface StatusView {
   markdown: string;
 }
 
+export interface ViewOptions {
+  /** Show the 7-day week next to the 5-hour session in the status-bar text (the `showWeekly` setting). */
+  showWeekly?: boolean;
+}
+
 export interface MenuEntry {
   label: string;
   description?: string;
@@ -33,6 +38,12 @@ function summaryLine(s: Snapshot): string {
   return `Session (5h) **${pctText(s.fiveHour).trim()}** · Weekly (7d) **${pctText(s.sevenDay).trim()}**`;
 }
 
+/** The numbers in the status-bar text: the 5-hour session alone, or labelled next to the 7-day week. */
+function usageText(fiveHour: number, sevenDay: number, showWeekly: boolean): string {
+  const five = `${Math.trunc(fiveHour)}%`;
+  return showWeekly ? `5h ${five} · 7d ${Math.trunc(sevenDay)}%` : five;
+}
+
 export function escapeMarkdown(s: string): string {
   return s.replace(/[\\`*_{}[\]()#+\-.!|<>]/g, "\\$&");
 }
@@ -42,7 +53,13 @@ function retryIn(state: State, now: number): string {
   return timeLeft(new Date(retryAt(state)).toISOString(), now);
 }
 
-export function statusView(state: State, commands: Commands, now = Date.now()): StatusView {
+export function statusView(
+  state: State,
+  commands: Commands,
+  now = Date.now(),
+  { showWeekly = false }: ViewOptions = {},
+): StatusView {
+  const s = state.snapshot;
   let text: string;
   let body: string;
   switch (state.status) {
@@ -64,7 +81,7 @@ export function statusView(state: State, commands: Commands, now = Date.now()): 
         "(not available for the macOS Keychain).";
       break;
     case "rateLimited":
-      text = `$(clock) ${state.snapshot ? `${Math.trunc(state.snapshot.fiveHour)}%` : "—"}`;
+      text = `$(clock) ${s ? usageText(s.fiveHour, s.sevenDay, showWeekly) : "—"}`;
       body =
         `$(clock) Claude is rate limiting requests. The next check is in ${retryIn(state, now)}; ` +
         "Refresh Now will not ask sooner.";
@@ -74,7 +91,7 @@ export function statusView(state: State, commands: Commands, now = Date.now()): 
       body = `$(error) ${escapeMarkdown(state.error ?? "Unknown error")}`;
       break;
     case "ok":
-      text = `$(sparkle) ${Math.trunc(state.snapshot?.fiveHour ?? 0)}%`;
+      text = `$(sparkle) ${usageText(s?.fiveHour ?? 0, s?.sevenDay ?? 0, showWeekly)}`;
       body = "";
       break;
   }

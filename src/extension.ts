@@ -86,7 +86,9 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
 
   // ── rendering ──
   function render() {
-    const plain = statusView(state, { refresh: CMD_REFRESH, openCredentials: CMD_OPEN_CREDS });
+    const plain = statusView(state, { refresh: CMD_REFRESH, openCredentials: CMD_OPEN_CREDS }, Date.now(), {
+      showWeekly: cfg().get<boolean>("showWeekly", false),
+    });
     const view = dev ? devView(plain) : plain;
     const tooltip = new vscode.MarkdownString(view.markdown, true);
     tooltip.isTrusted = { enabledCommands: [CMD_REFRESH, CMD_OPEN_CREDS] };
@@ -166,6 +168,7 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
     }),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration(`${SETTINGS}.pollIntervalSeconds`)) schedule();
+      if (e.affectsConfiguration(`${SETTINGS}.showWeekly`)) render();
       if (e.affectsConfiguration(`${SETTINGS}.refreshExpiredToken`)) void refreshNow();
     }),
   );

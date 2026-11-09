@@ -59,6 +59,7 @@ It never writes to the macOS Keychain, so the option has no effect on a Keychain
 | Setting | Default | |
 | --- | --- | --- |
 | `claudeLimitsMeter.pollIntervalSeconds` | `60` | Seconds between checks (minimum 15). Checks are skipped while the window is unfocused. |
+| `claudeLimitsMeter.showWeekly` | `false` | Show the 7-day weekly usage next to the 5-hour session in the status bar (`5h 42% · 7d 18%`). Off shows the 5-hour session alone. |
 | `claudeLimitsMeter.refreshExpiredToken` | `false` | See above. |
 | `claudeLimitsMeter.clientId` | `""` | OAuth client id for the option above; empty means auto-detect. |
 

@@ -75,6 +75,7 @@ const checks = {
   "settings are contributed with safe defaults"() {
     const cfg = vscode.workspace.getConfiguration("claudeLimitsMeter");
     assert.equal(cfg.get("pollIntervalSeconds"), 60);
+    assert.equal(cfg.get("showWeekly"), false, "the bar shows the 5-hour session alone unless asked");
     assert.equal(cfg.get("refreshExpiredToken"), false, "refreshing a login must stay opt-in");
     assert.equal(cfg.get("clientId"), "");
   },
@@ -154,6 +155,22 @@ const checks = {
     assert.equal(item.text, "$(sparkle) 55% DEV");
     assertIn(item.tooltip, "Session (5h) **55%** · Weekly (7d) **20%**", "the tooltip");
     assert.ok(!item.tooltip.includes("HTTP 500"), "the error is gone");
+  },
+
+  async "showWeekly adds the week to the bar text as soon as it is switched on, and removes it when off"() {
+    const cfg = vscode.workspace.getConfiguration("claudeLimitsMeter");
+    // The item is re-rendered by the settings-change event, which may land just after update() resolves.
+    const barText = async (expected) => {
+      for (let i = 0; i < 40 && api.statusBar().text !== expected; i++) await new Promise((r) => setTimeout(r, 50));
+      return api.statusBar().text;
+    };
+    try {
+      await cfg.update("showWeekly", true, vscode.ConfigurationTarget.Workspace);
+      assert.equal(await barText("$(sparkle) 5h 55% · 7d 20% DEV"), "$(sparkle) 5h 55% · 7d 20% DEV");
+    } finally {
+      await cfg.update("showWeekly", undefined, vscode.ConfigurationTarget.Workspace);
+    }
+    assert.equal(await barText("$(sparkle) 55% DEV"), "$(sparkle) 55% DEV");
   },
 
   // ── an expired login, renewed only when the user opted in ──
