@@ -13,6 +13,7 @@ const MUST_NOT_HAVE = [
   /^src\//,
   /^test\//,
   /^scripts\//,
+  /^docs\//,
   /^\.github\//,
   /^\.claude\//,
   /^\.vscode\//,

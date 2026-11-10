@@ -10,12 +10,14 @@ triggered by hand.
 2. Open the pull request. CI checks that the version matches the changelog and that no release has used it yet.
 3. Merge it. [`release.yaml`](../.github/workflows/release.yaml) then:
    - runs the whole test workflow on the merged commit;
-   - if there is no release `vX.Y.Z` yet, builds the `.vsix`, tags `vX.Y.Z` and publishes a GitHub release with the
-     changelog entry as its notes and the `.vsix` attached;
-   - if Marketplace publishing is switched on (below), publishes that same `.vsix` there.
+   - builds the `.vsix` from that commit, records its SHA-256 and keeps it as an artifact of the run;
+   - if there is no release `vX.Y.Z` yet, tags `vX.Y.Z` and publishes a GitHub release with the changelog entry as its
+     notes and that `.vsix` attached;
+   - if Marketplace publishing is switched on (below), publishes that same file there: the publish job takes it from the
+     run's artifact and checks the SHA-256 the build job computed before it publishes anything.
 
 A merge that does not change `src/` or `package.json` (docs, tests, CI) releases nothing: the version already has a
-release, so the workflow stops after the tests.
+release, so the workflow builds the `.vsix` once more, creates no release and finds that version already published.
 
 ## Publishing to the VS Code Marketplace
 
@@ -36,7 +38,9 @@ token to create, store or renew.
 
 4. The next release is published to the Marketplace after its GitHub release. To retry a failed publish, run the
    *Release* workflow by hand on `main` (`gh workflow run release.yaml`): it skips the GitHub release that already
-   exists and publishes unless that version is already on the Marketplace.
+   exists, builds the `.vsix` again from the commit that has just been tested and publishes it unless that version is
+   already on the Marketplace. The GitHub release's own copy of the file is not consulted: a release asset can be replaced
+   by anyone with write access, and a file taken from it would have no checksum to be checked against.
 
 To stop publishing, set `PUBLISH_TO_MARKETPLACE` to anything but `true`.
 
