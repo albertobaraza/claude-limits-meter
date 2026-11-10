@@ -4,6 +4,12 @@ All notable changes to this extension are documented here, following
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] - 2026-11-10
+
+### Changed
+
+- The Marketplace listing has a shorter description, more search keywords (usage limits, session limit, weekly limit, quota) and is listed under the AI category as well as Other.
+
 ## [0.5.1] - 2026-11-10
 
 ### Changed
