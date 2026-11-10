@@ -125,6 +125,14 @@ test("an error message cannot inject Markdown or a command link into the tooltip
   assert.equal(escapeMarkdown("a_b*c"), "a\\_b\\*c");
 });
 
+test("an error message is one line, and the marks that open a fence, a heading or an entity are escaped", () => {
+  const out = escapeMarkdown("first\n~~~\n# heading\r\n=====\n  $(error) &lt; x\ttab");
+  assert.doesNotMatch(out, /[\n\r\t]/, "no line break survives, so nothing can start a block");
+  assert.equal(out, String.raw`first \~\~\~ \# heading \=\=\=\=\= \$\(error\) \&lt; x tab`);
+  const { markdown } = view({ status: "error", error: "boom\n[x](command:claudeLimitsMeter.openCredentials)" });
+  assert.equal(markdown.split("\n").filter((l) => l.includes("boom")).length, 1, "the whole message sits on one line");
+});
+
 test("the menu lists both windows with bars and reset times, when they were checked, then the actions", () => {
   const entries = menuEntries({ status: "ok", snapshot: SNAPSHOT }, NOW);
   assert.deepEqual(

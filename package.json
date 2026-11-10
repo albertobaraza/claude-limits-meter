@@ -2,7 +2,7 @@
   "name": "claude-limits-meter",
   "displayName": "Claude Limits Meter",
   "description": "Unofficial: shows your Claude Code usage (5-hour session and 7-day weekly limits) in the VS Code status bar. Works on Linux, macOS, Windows, WSL and remote hosts. Thanks to Claude Usage Bar by Harsh Agarwal, whose source helped.",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "publisher": "albertobaraza",
   "icon": "images/icon.png",
   "license": "MIT",
@@ -34,6 +34,12 @@
   "activationEvents": [
     "onStartupFinished"
   ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "The extension reads your Claude Code login and sends it to Anthropic, and a workspace's settings could steer it: it runs only in a workspace you trust."
+    }
+  },
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
@@ -61,7 +67,8 @@
           "type": "number",
           "default": 60,
           "minimum": 15,
-          "description": "Seconds between usage checks. Checks are skipped while the VS Code window is unfocused."
+          "maximum": 86400,
+          "description": "Seconds between usage checks, from 15 to 86400 (a day). Checks are skipped while the VS Code window is unfocused."
         },
         "claudeLimitsMeter.showWeekly": {
           "type": "boolean",
@@ -71,12 +78,12 @@
         "claudeLimitsMeter.refreshExpiredToken": {
           "type": "boolean",
           "default": false,
-          "markdownDescription": "Renew an expired Claude token from this extension instead of waiting for Claude Code to do it. Uses Claude Code's OAuth client id and writes the renewed login back to `~/.claude/.credentials.json`. Refresh tokens rotate, so if the write-back fails Claude Code may need you to sign in again. Not available for a login stored in the macOS Keychain (the extension never writes to it)."
+          "markdownDescription": "Renew an expired Claude token from this extension instead of waiting for Claude Code to do it. Uses Claude Code's OAuth client id and writes the renewed login back to `~/.claude/.credentials.json`. Refresh tokens rotate, so if the write-back fails Claude Code may need you to sign in again. Not available for a login stored in the macOS Keychain (the extension never writes to it). Only read from your User settings: a value in a workspace's `.vscode/settings.json` is ignored."
         },
         "claudeLimitsMeter.clientId": {
           "type": "string",
           "default": "",
-          "markdownDescription": "OAuth client id used when `#claudeLimitsMeter.refreshExpiredToken#` is on. Leave empty to detect it from the installed Claude Code extension."
+          "markdownDescription": "OAuth client id used when `#claudeLimitsMeter.refreshExpiredToken#` is on. Leave empty to detect it from the installed Claude Code extension. Only read from your User settings: a value in a workspace's `.vscode/settings.json` is ignored."
         }
       }
     }

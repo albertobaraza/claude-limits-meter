@@ -153,6 +153,19 @@ const checks = {
     assert.ok(!item.tooltip.includes("boom") && !item.tooltip.includes(FAKE_TOKENS.access), "the body must not be shown");
   },
 
+  async "a redirect from the API is not followed: VS Code's own fetch never sends the token on to the host it names"() {
+    // The same fake answers on `localhost`, which is another origin than the 127.0.0.1 the extension was given: a followed
+    // redirect would show up as a second request carrying the token.
+    const elsewhere = `${new URL(apiOrigin()).protocol}//localhost:${new URL(apiOrigin()).port}/api/oauth/usage`;
+    await answer(307, { headers: { location: elsewhere }, body: { redirected: true } });
+    await forgetRequests();
+    const item = await checked();
+    assert.equal(item.text, "$(sparkle) ✗ DEV");
+    assertIn(item.tooltip, "Usage fetch failed: HTTP 307", "the tooltip names the status, as for any other refusal");
+    const sent = (await requests()).filter((r) => r.endpoint === "usage");
+    assert.equal(sent.length, 1, `the redirect was followed: ${sent.length} requests reached the API`);
+  },
+
   async "it recovers when the API does"() {
     await answer(200, { body: reading(55.1, 20) });
     const item = await checked();
@@ -188,10 +201,31 @@ const checks = {
     assert.equal(readLogin(home()).refreshToken, FAKE_TOKENS.refresh, "the login is left as it was");
   },
 
-  async "with renewal switched on, the login is renewed, written back and used"() {
+  async "a workspace cannot switch renewal on: its .vscode/settings.json is ignored for the two settings that rewrite the login"() {
     const cfg = vscode.workspace.getConfiguration("claudeLimitsMeter");
-    await cfg.update("clientId", "00000000-0000-0000-0000-000000000000", vscode.ConfigurationTarget.Workspace);
+    await cfg.update("clientId", "11111111-1111-1111-1111-111111111111", vscode.ConfigurationTarget.Workspace);
     await cfg.update("refreshExpiredToken", true, vscode.ConfigurationTarget.Workspace);
+    try {
+      // (a WorkspaceConfiguration is a snapshot: read it again to see what update() wrote)
+      const seen = vscode.workspace.getConfiguration("claudeLimitsMeter");
+      assert.equal(seen.get("refreshExpiredToken"), true, "VS Code itself does report the workspace value");
+      assert.equal(seen.inspect("refreshExpiredToken").workspaceValue, true, "and says it came from the workspace");
+      writeLogin(home(), { expired: true });
+      await forgetRequests();
+      const item = await checked();
+      assert.equal(item.text, "$(sparkle) ! DEV", "the login is still reported as expired");
+      assert.deepEqual(await requests(), [], "no token request: the refresh token stayed where it was");
+      assert.equal(readLogin(home()).refreshToken, FAKE_TOKENS.refresh, "the login is left as it was");
+    } finally {
+      await cfg.update("refreshExpiredToken", undefined, vscode.ConfigurationTarget.Workspace);
+      await cfg.update("clientId", undefined, vscode.ConfigurationTarget.Workspace);
+    }
+  },
+
+  async "with renewal switched on in the User settings, the login is renewed, written back and used"() {
+    const cfg = vscode.workspace.getConfiguration("claudeLimitsMeter");
+    await cfg.update("clientId", "00000000-0000-0000-0000-000000000000", vscode.ConfigurationTarget.Global);
+    await cfg.update("refreshExpiredToken", true, vscode.ConfigurationTarget.Global);
     try {
       await forgetRequests();
       const item = await checked();
@@ -213,8 +247,8 @@ const checks = {
       assert.equal(saved.refreshToken, FAKE_TOKENS.renewedRefresh);
       assert.ok(saved.expiresAt > Date.now() + 30 * 60_000);
     } finally {
-      await cfg.update("refreshExpiredToken", undefined, vscode.ConfigurationTarget.Workspace);
-      await cfg.update("clientId", undefined, vscode.ConfigurationTarget.Workspace);
+      await cfg.update("refreshExpiredToken", undefined, vscode.ConfigurationTarget.Global);
+      await cfg.update("clientId", undefined, vscode.ConfigurationTarget.Global);
     }
   },
 

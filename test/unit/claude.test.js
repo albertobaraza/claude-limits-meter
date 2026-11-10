@@ -44,6 +44,7 @@ const json = (obj, status = 200) => (_, res) => {
 /** Client wired to the mock server. `over` overrides any option. */
 function makeClient(credsPath, base, over = {}) {
   const warnings = [];
+  const notes = [];
   const execCalls = [];
   const opts = {
     credsPath,
@@ -59,10 +60,11 @@ function makeClient(credsPath, base, over = {}) {
     refreshEnabled: () => false,
     clientId: async () => "client-123",
     onWarn: (m) => warnings.push(m),
+    onNote: (m) => notes.push(m),
     now: () => NOW,
     ...over,
   };
-  return { client: new c.ClaudeClient(opts), warnings, execCalls };
+  return { client: new c.ClaudeClient(opts), warnings, notes, execCalls };
 }
 
 const FRESH = { accessToken: "A", refreshToken: "R", expiresAt: NOW + 3_600_000 };
@@ -161,6 +163,144 @@ test("refresh failure with nothing fresh on disk throws, without leaking the res
   srv.close();
 });
 
+test("a redirect from the token endpoint is not followed: the refresh token goes nowhere else", async () => {
+  const elsewhere = await mockServer({ "/other": json({ access_token: "X", expires_in: 3600 }) });
+  for (const status of [301, 302, 307, 308]) {
+    const file = tmpCreds(EXPIRED);
+    const srv = await mockServer({ "/token": (_, res) => ((res.statusCode = status), res.setHeader("location", `${elsewhere.base}/other`), res.end()) });
+    const { client } = makeClient(file, srv.base, { refreshEnabled: () => true });
+    await assert.rejects(client.getToken(), (e) => e instanceof c.HttpError && e.status === status, `HTTP ${status}`);
+    assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).claudeAiOauth.accessToken, "OLD", "the login is untouched");
+    srv.close();
+  }
+  assert.deepEqual(elsewhere.requests, [], "the other host was never contacted, so it never saw the refresh token");
+  elsewhere.close();
+});
+
+test("a redirect from the usage endpoint is not followed either", async () => {
+  const elsewhere = await mockServer({ "/other": json({}) });
+  const srv = await mockServer({ "/usage": (_, res) => ((res.statusCode = 307), res.setHeader("location", `${elsewhere.base}/other`), res.end()) });
+  const { client } = makeClient("unused", srv.base);
+  await assert.rejects(client.fetchUsage("TOK"), (e) => e instanceof c.HttpError && e.status === 307);
+  assert.deepEqual(elsewhere.requests, []);
+  elsewhere.close();
+  srv.close();
+});
+
+test("a token answer that is not the documented shape is an error and leaves the login on disk alone", async () => {
+  const answers = [
+    ["{}", (_, res) => res.end("{}")],
+    ["an error object", json({ error: "invalid_grant" })],
+    ["no expiry", json({ access_token: "NEW" })],
+    ["a zero expiry", json({ access_token: "NEW", expires_in: 0 })],
+    ["an expiry that is not a number", json({ access_token: "NEW", expires_in: "3600" })],
+    ["an empty access token", json({ access_token: "", expires_in: 3600 })],
+    ["an expiry beyond a year", json({ access_token: "NEW", expires_in: 365 * 24 * 3600 + 1 })],
+    ["an expiry that would overflow", json({ access_token: "NEW", expires_in: 1e308 })],
+    ["an access token with a newline", json({ access_token: "NEW\nTOKEN", expires_in: 3600 })],
+    ["an access token with a space", json({ access_token: "NEW TOKEN", expires_in: 3600 })],
+    ["an access token that is not ASCII", json({ access_token: "NEW\u00e9", expires_in: 3600 })],
+    ["a refresh token that is not a string", json({ access_token: "NEW", refresh_token: 7, expires_in: 3600 })],
+    ["null", (_, res) => res.end("null")],
+    ["an array", (_, res) => res.end("[]")],
+  ];
+  for (const [what, handler] of answers) {
+    const file = tmpCreds(EXPIRED);
+    const before = fs.readFileSync(file, "utf8");
+    const srv = await mockServer({ "/token": handler });
+    const { client, warnings } = makeClient(file, srv.base, { refreshEnabled: () => true });
+    await assert.rejects(client.getToken(), (e) => e instanceof c.BadResponseError && e.message === "Token refresh failed: unexpected response", what);
+    assert.equal(fs.readFileSync(file, "utf8"), before, `${what}: the file is byte for byte as it was`);
+    assert.deepEqual(warnings, []);
+    srv.close();
+  }
+});
+
+test("a body that is not JSON is reported without quoting any of it", async () => {
+  const body = "<html>captive portal secret-body</html>";
+  const srv = await mockServer({ "/token": (_, res) => res.end(body), "/usage": (_, res) => res.end(body) });
+  const { client } = makeClient(tmpCreds(EXPIRED), srv.base, { refreshEnabled: () => true });
+  for (const call of [() => client.getToken(), () => client.fetchUsage("TOK")]) {
+    await assert.rejects(call(), (e) => {
+      assert.ok(e instanceof c.BadResponseError);
+      assert.ok(/: unexpected response$/.test(e.message));
+      assert.ok(!e.message.includes("html") && !e.message.includes("secret-body") && !e.message.includes("portal"), e.message);
+      return true;
+    });
+  }
+  srv.close();
+});
+
+test("a usage answer that is not an object is an error", async () => {
+  for (const body of ["null", "[]", '"text"', "7"]) {
+    const srv = await mockServer({ "/usage": (_, res) => res.end(body) });
+    const { client } = makeClient("unused", srv.base);
+    await assert.rejects(client.fetchUsage("TOK"), (e) => e instanceof c.BadResponseError, body);
+    srv.close();
+  }
+});
+
+test("a login another process saved while ours was being renewed is kept, not overwritten", async () => {
+  const file = tmpCreds(EXPIRED);
+  const theirs = { accessToken: "THEIRS", refreshToken: "R9", expiresAt: NOW + 3_600_000 };
+  const srv = await mockServer({
+    "/token": (req, res) => {
+      fs.writeFileSync(file, JSON.stringify({ claudeAiOauth: theirs })); // Claude Code saves its own renewal meanwhile
+      json({ access_token: "OURS", refresh_token: "R2", expires_in: 3600 })(req, res);
+    },
+  });
+  const { client, warnings } = makeClient(file, srv.base, { refreshEnabled: () => true });
+  assert.deepEqual(await client.getToken(), { kind: "ok", token: "THEIRS" }, "their login is used for this check");
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")).claudeAiOauth, theirs, "and it is still what is on disk");
+  assert.deepEqual(warnings, [], "nothing was lost, so nothing to warn about");
+  assert.equal(srv.requests.length, 1);
+  srv.close();
+});
+
+test("when the login another process saved is no use, the renewal stays in memory and the file is still left alone", async () => {
+  const file = tmpCreds(EXPIRED);
+  const theirs = { accessToken: "THEIRS-OLD", refreshToken: "R9", expiresAt: NOW - 1 }; // not fresh either
+  const srv = await mockServer({
+    "/token": (req, res) => {
+      fs.writeFileSync(file, JSON.stringify({ claudeAiOauth: theirs }));
+      json({ access_token: "OURS", refresh_token: "R2", expires_in: 3600 })(req, res);
+    },
+  });
+  const { client } = makeClient(file, srv.base, { refreshEnabled: () => true });
+  assert.deepEqual(await client.getToken(), { kind: "ok", token: "OURS" });
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")).claudeAiOauth, theirs, "the file was not overwritten");
+  assert.deepEqual(await client.getToken(), { kind: "ok", token: "OURS" }, "and the renewal is kept for the next check");
+  assert.equal(srv.requests.length, 1, "without asking again");
+  srv.close();
+});
+
+test("a credentials file that is group or world readable is made private when it is rewritten, and the log says so", { skip: isWindows }, async () => {
+  const file = tmpCreds(EXPIRED);
+  fs.chmodSync(file, 0o644);
+  const srv = await mockServer({ "/token": json({ access_token: "NEW", refresh_token: "R2", expires_in: 3600 }) });
+  const { client, notes, warnings } = makeClient(file, srv.base, { refreshEnabled: () => true });
+  assert.equal((await client.getToken()).kind, "ok");
+  assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+  assert.equal(notes.length, 1);
+  assert.match(notes[0], /readable by you only \(it was mode 644\)/);
+  assert.ok(!notes[0].includes("NEW") && !notes[0].includes("R1"), "no token in the note");
+  assert.deepEqual(warnings, []);
+  srv.close();
+});
+
+test("a file that is already private is left private, silently, and an owner-only mode is never widened", { skip: isWindows }, async () => {
+  for (const mode of [0o600, 0o400 | 0o200]) {
+    const file = tmpCreds(EXPIRED);
+    fs.chmodSync(file, mode);
+    const srv = await mockServer({ "/token": json({ access_token: "NEW", refresh_token: "R2", expires_in: 3600 }) });
+    const { client, notes } = makeClient(file, srv.base, { refreshEnabled: () => true });
+    assert.equal((await client.getToken()).kind, "ok");
+    assert.equal(fs.statSync(file).mode & 0o777, mode);
+    assert.deepEqual(notes, []);
+    srv.close();
+  }
+});
+
 test("a renewed login that cannot be saved is kept in memory and the user is warned", { skip: isWindows || isRoot }, async () => {
   const file = tmpCreds(EXPIRED);
   const dir = path.dirname(file);
@@ -192,6 +332,73 @@ test("a symlinked credentials file stays a symlink after a renewal", { skip: isW
   srv.close();
 });
 
+test("the write-back never writes through a link or file planted at a predictable temporary name", { skip: isWindows }, async () => {
+  const file = tmpCreds(EXPIRED);
+  const real = fs.realpathSync(file);
+  const canary = path.join(path.dirname(real), "canary.txt");
+  fs.writeFileSync(canary, "CANARY");
+  fs.symlinkSync(canary, `${real}.${process.pid}.tmp`); // where the old code wrote its temporary file
+  const srv = await mockServer({ "/token": json({ access_token: "NEW", refresh_token: "R2", expires_in: 3600 }) });
+  const { client, warnings } = makeClient(file, srv.base, { refreshEnabled: () => true });
+  assert.deepEqual(await client.getToken(), { kind: "ok", token: "NEW" });
+  assert.equal(fs.readFileSync(canary, "utf8"), "CANARY", "nothing was written through the planted link");
+  assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).claudeAiOauth.accessToken, "NEW", "the login was saved");
+  assert.deepEqual(warnings, []);
+  srv.close();
+});
+
+test("a refresh token the server refused is not sent again for five minutes, unless the login changes", async () => {
+  const file = tmpCreds(EXPIRED);
+  const srv = await mockServer({ "/token": (_, res) => ((res.statusCode = 400), res.end("invalid_grant")) });
+  let t = NOW;
+  const { client } = makeClient(file, srv.base, { refreshEnabled: () => true, now: () => t });
+  const refused = (e) => e instanceof c.HttpError && e.status === 400;
+  await assert.rejects(client.getToken(), refused);
+  assert.equal(srv.requests.length, 1);
+  t += 4 * 60_000;
+  await assert.rejects(client.getToken(), refused, "the same refusal is reported, so the bar still says what is wrong");
+  assert.equal(srv.requests.length, 1, "and the token was not sent again");
+  fs.writeFileSync(file, JSON.stringify({ claudeAiOauth: { ...EXPIRED, refreshToken: "R-NEW-LOGIN" } }));
+  await assert.rejects(client.getToken(), refused);
+  assert.equal(srv.requests.length, 2, "a new login has a new refresh token: that one is tried at once");
+  t += 6 * 60_000;
+  await assert.rejects(client.getToken(), refused);
+  assert.equal(srv.requests.length, 3, "after five minutes it is tried again");
+  srv.close();
+});
+
+test("a refresh that Claude Code won the race for, or that needed no token, leaves nothing to wait for", async () => {
+  const file = tmpCreds(EXPIRED);
+  let answers = 0;
+  const srv = await mockServer({ "/token": (_, res) => (answers++ === 0 ? ((res.statusCode = 400), res.end()) : json({ access_token: "NEW", expires_in: 3600 })(_, res)) });
+  const { client } = makeClient(file, srv.base, { refreshEnabled: () => true });
+  await assert.rejects(client.getToken(), c.HttpError);
+  fs.writeFileSync(file, JSON.stringify({ claudeAiOauth: { ...FRESH, accessToken: "CC-REFRESHED" } })); // Claude Code renewed
+  assert.deepEqual(await client.getToken(), { kind: "ok", token: "CC-REFRESHED" }, "a fresh login is used at once, whatever happened before");
+  srv.close();
+});
+
+test("an unsaved renewal is dropped when the login is replaced or logged out, and never replaces another account", { skip: isWindows || isRoot }, async () => {
+  const file = tmpCreds(EXPIRED);
+  const dir = path.dirname(file);
+  const srv = await mockServer({ "/token": json({ access_token: "NEW", refresh_token: "R2", expires_in: 3600 }) });
+  const { client } = makeClient(file, srv.base, { refreshEnabled: () => true });
+  fs.chmodSync(dir, 0o500); // the renewal cannot be saved
+  try {
+    assert.deepEqual(await client.getToken(), { kind: "ok", token: "NEW" });
+    assert.deepEqual(await client.getToken(), { kind: "ok", token: "NEW" }, "still the login it was renewed from: kept");
+  } finally {
+    fs.chmodSync(dir, 0o700);
+  }
+  // Another account logs in. Its token expires sooner than the unsaved one, which used to be enough for the old one to win.
+  fs.writeFileSync(file, JSON.stringify({ claudeAiOauth: { accessToken: "B", refreshToken: "RB", expiresAt: NOW + 120_000 } }));
+  assert.deepEqual(await client.getToken(), { kind: "ok", token: "B" });
+  // Logged out: nothing is left of either.
+  fs.rmSync(file);
+  assert.deepEqual(await client.getToken(), { kind: "none" });
+  srv.close();
+});
+
 test("the Keychain is never consulted off macOS", async () => {
   const srv = await mockServer();
   for (const platform of ["linux", "win32"]) {
@@ -214,7 +421,7 @@ test("macOS reads the login from the Keychain (account name first)", async () =>
     exec: async (file, args) => (calls.push([file, ...args]), keychainJson(FRESH) + "\n"),
   });
   assert.deepEqual(await client.getToken(), { kind: "ok", token: "A" });
-  assert.deepEqual(calls[0], ["security", "find-generic-password", "-a", "tester", "-s", "Claude Code-credentials", "-w"]);
+  assert.deepEqual(calls[0], ["/usr/bin/security", "find-generic-password", "-a", "tester", "-s", "Claude Code-credentials", "-w"], "by absolute path, not looked up in PATH");
   srv.close();
 });
 
@@ -262,6 +469,69 @@ test("garbage from the Keychain is ignored", async () => {
   srv.close();
 });
 
+// A file read only because the Keychain did not answer may be a stale copy of the login the Keychain still holds.
+const notFound = () => Object.assign(new Error("The specified item could not be found in the keychain."), { code: 44 });
+
+test("macOS renews a file login only when the Keychain said, to every query, that it holds none", async () => {
+  const srv = await mockServer({ "/token": json({ access_token: "NEW", refresh_token: "R2", expires_in: 3600 }) });
+  const { client } = makeClient(tmpCreds(EXPIRED), srv.base, {
+    platform: "darwin",
+    refreshEnabled: () => true,
+    exec: async () => {
+      throw notFound();
+    },
+  });
+  assert.deepEqual(await client.getToken(), { kind: "ok", token: "NEW" });
+  assert.equal(srv.requests.length, 1);
+  srv.close();
+});
+
+test("macOS never renews a file login when the Keychain failed to answer, whatever the failure was", async () => {
+  const failures = {
+    "a plain error": () => new Error("spawn failed"),
+    "access denied (exit 51)": () => Object.assign(new Error("denied"), { code: 51 }),
+    "a timeout": () => Object.assign(new Error("timed out"), { killed: true, signal: "SIGTERM", code: null }),
+    "not found by one query and an error from the other": null,
+  };
+  for (const [what, make] of Object.entries(failures)) {
+    const srv = await mockServer({ "/token": json({ access_token: "NEW", expires_in: 3600 }) });
+    let n = 0;
+    const { client } = makeClient(tmpCreds(EXPIRED), srv.base, {
+      platform: "darwin",
+      refreshEnabled: () => true,
+      exec: async () => {
+        throw make ? make() : n++ === 0 ? notFound() : new Error("spawn failed");
+      },
+    });
+    assert.deepEqual(await client.getToken(), { kind: "expired" }, what);
+    assert.equal(srv.requests.length, 0, `${what}: a stale copy of the Keychain's login must not be rotated`);
+    srv.close();
+  }
+});
+
+test("macOS does not take a Keychain item it could not read for an absent one", async () => {
+  const srv = await mockServer({ "/token": json({ access_token: "NEW", expires_in: 3600 }) });
+  const { client } = makeClient(tmpCreds(EXPIRED), srv.base, { platform: "darwin", refreshEnabled: () => true, exec: async () => "not json" });
+  assert.deepEqual(await client.getToken(), { kind: "expired" });
+  assert.equal(srv.requests.length, 0);
+  srv.close();
+});
+
+test("every query for the Keychain names /usr/bin/security", async () => {
+  const srv = await mockServer();
+  const files = [];
+  const { client } = makeClient("/nonexistent/creds.json", srv.base, {
+    platform: "darwin",
+    exec: async (file) => {
+      files.push(file);
+      throw notFound();
+    },
+  });
+  await client.getToken();
+  assert.deepEqual(files, ["/usr/bin/security", "/usr/bin/security"]);
+  srv.close();
+});
+
 // ── usage API ────────────────────────────────────────────────────────────────
 
 test("fetchUsage sends the expected headers and parses the body", async () => {
@@ -302,6 +572,21 @@ test("a 429 carries the server's Retry-After, and never its body", async () => {
   srv.close();
 });
 
+test("a usage answer with neither window in it is an error, not a reading of 0%", async () => {
+  for (const body of ["{}", '{"error":"x"}', '{"unrelated":{"utilization":5}}']) {
+    const srv = await mockServer({ "/usage": (_, res) => res.end(body) });
+    const { client } = makeClient("unused", srv.base);
+    await assert.rejects(client.fetchUsage("TOK"), (e) => e instanceof c.BadResponseError, body);
+    srv.close();
+  }
+  for (const body of ['{"five_hour":null}', '{"seven_day":{"utilization":3}}', '{"five_hour":{"utilization":0,"resets_at":null},"seven_day":null}']) {
+    const srv = await mockServer({ "/usage": (_, res) => res.end(body) });
+    const { client } = makeClient("unused", srv.base);
+    assert.deepEqual(await client.fetchUsage("TOK"), JSON.parse(body), `${body} is a reading (an idle account may report no window)`);
+    srv.close();
+  }
+});
+
 test("parseRetryAfter reads seconds or an HTTP date, clamps them, and ignores anything else", () => {
   const now = Date.parse("2026-01-01T00:00:00Z");
   assert.equal(c.parseRetryAfter("90", now), 90_000);
@@ -313,12 +598,67 @@ test("parseRetryAfter reads seconds or an HTTP date, clamps them, and ignores an
   for (const bad of [undefined, null, "", "soon"]) assert.equal(c.parseRetryAfter(bad, now), undefined, String(bad));
 });
 
+test("an access token that cannot be a header value reads as an expired login, and fetch never sees it", async () => {
+  for (const bad of ["A\nB", "A\r\nX-Evil: 1", "A\u0000B", "A B", "A\u00e9", "", 7, null, ["A"]]) {
+    const srv = await mockServer();
+    const { client } = makeClient(tmpCreds({ accessToken: bad, refreshToken: "R", expiresAt: NOW + 3_600_000 }), srv.base);
+    assert.deepEqual(await client.getToken(), { kind: "expired" }, JSON.stringify(bad));
+    assert.equal(srv.requests.length, 0);
+    srv.close();
+  }
+});
+
+test("a malformed access token does not stop a permitted renewal, and the renewed login replaces it", async () => {
+  const file = tmpCreds({ accessToken: "A\nB", refreshToken: "R1", expiresAt: NOW + 3_600_000 });
+  const srv = await mockServer({ "/token": json({ access_token: "NEW", refresh_token: "R2", expires_in: 3600 }) });
+  const { client } = makeClient(file, srv.base, { refreshEnabled: () => true });
+  assert.deepEqual(await client.getToken(), { kind: "ok", token: "NEW" });
+  assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).claudeAiOauth.accessToken, "NEW");
+  srv.close();
+});
+
+test("real Claude Code tokens (printable ASCII) pass", async () => {
+  const srv = await mockServer();
+  const token = "sk-ant-oat01-AbC_dEf-123~456.789=";
+  const { client } = makeClient(tmpCreds({ accessToken: token, refreshToken: "R", expiresAt: NOW + 3_600_000 }), srv.base);
+  assert.deepEqual(await client.getToken(), { kind: "ok", token });
+  srv.close();
+});
+
 test("findClientId reads CLIENT_ID from the first extension dir that has it", async () => {
   const empty = fs.mkdtempSync(path.join(os.tmpdir(), "ext-a-"));
   const withId = fs.mkdtempSync(path.join(os.tmpdir(), "ext-b-"));
   fs.writeFileSync(path.join(withId, "extension.js"), 'x={CLIENT_ID:"9d1c250a-e61b-44d9-88ed-5944d1962f5e",y:1}');
   assert.equal(await c.findClientId([empty, path.join(os.tmpdir(), "nonexistent-ext"), withId]), "9d1c250a-e61b-44d9-88ed-5944d1962f5e");
   assert.equal(await c.findClientId([empty]), undefined);
+});
+
+// The shape of Claude Code's bundle: configurations side by side, each with a suffix; production has an empty one.
+const LOCAL = 'CLIENT_ID:"22422756-60c9-4084-8eb7-27705fd5cf9a",DESIGN_CLIENT_ID:"00000000-0000-4000-8000-000000000000",OAUTH_FILE_SUFFIX:"-local-oauth",MCP_PROXY_URL:"http://localhost:8205"';
+const PROD = 'CLIENT_ID:"9d1c250a-e61b-44d9-88ed-5944d1962f5e",DESIGN_CLIENT_ID:"59637612-477b-4836-a601-b0589eda7704",OAUTH_FILE_SUFFIX:"",MCP_PROXY_URL:"https://mcp-proxy.example"';
+const extDir = (js) => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), "ext-c-"));
+  fs.writeFileSync(path.join(d, "extension.js"), js);
+  return d;
+};
+
+test("findClientId picks the production client id, whatever order the bundle lists its configurations in", async () => {
+  const prod = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
+  assert.equal(await c.findClientId([extDir(`a={${LOCAL}};b={${PROD}}`)]), prod, "local first (Claude Code 2.1.319)");
+  assert.equal(await c.findClientId([extDir(`a={${PROD}};b={${LOCAL}}`)]), prod, "production first");
+  assert.equal(await c.findClientId([extDir(`a={${LOCAL}};b={${PROD}};c={${PROD}};d={${LOCAL}}`)]), prod, "each configuration twice");
+  assert.equal(await c.findClientId([extDir(`a={${LOCAL}};b={${LOCAL.replace("-local-oauth", "-custom-oauth")}};c={${PROD}}`)]), prod, "any non-empty suffix is not production");
+});
+
+test("findClientId never returns a configuration with a suffix, a DESIGN_CLIENT_ID, or nothing at all", async () => {
+  const onlyLocal = extDir(`a={${LOCAL}}`);
+  assert.equal(await c.findClientId([onlyLocal]), undefined, "only a local configuration");
+  const production = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
+  assert.equal(await c.findClientId([onlyLocal, extDir(`a={${PROD}}`)]), production, "an older extension directory is tried next");
+  assert.equal(await c.findClientId([extDir('a={DESIGN_CLIENT_ID:"59637612-477b-4836-a601-b0589eda7704"}')]), undefined, "DESIGN_CLIENT_ID is not CLIENT_ID");
+  assert.equal(await c.findClientId([extDir('a={MY_CLIENT_ID:"59637612-477b-4836-a601-b0589eda7704"}')]), undefined, "nor is any other name that ends the same way");
+  assert.equal(await c.findClientId([extDir('a={CLIENT_ID:"not-a-uuid"}')]), undefined);
+  assert.equal(await c.findClientId([extDir('x={CLIENT_ID:"9d1c250a-e61b-44d9-88ed-5944d1962f5e"}')]), production, "a bundle that names no suffix at all (an older shape) still works");
 });
 
 // ── formatting ───────────────────────────────────────────────────────────────
@@ -381,12 +721,23 @@ test("the login can only be sent to the loopback, however the environment is set
   }
 });
 
+test("on macOS, a test host with the Keychain switched off reads and renews the file login like any other platform", async () => {
+  // This is what the integration test does on a macOS runner: the seam's stub must read as "the Keychain holds no login".
+  const { exec } = c.testOverrides({ [c.TEST_ENV.noKeychain]: "1" });
+  const file = tmpCreds(EXPIRED);
+  const srv = await mockServer({ "/token": json({ access_token: "NEW", refresh_token: "R2", expires_in: 3600 }) });
+  const { client } = makeClient(file, srv.base, { platform: "darwin", exec, refreshEnabled: () => true });
+  assert.deepEqual(await client.getToken(), { kind: "ok", token: "NEW" });
+  assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).claudeAiOauth.accessToken, "NEW", "written back to the file");
+  srv.close();
+});
+
 test("the Keychain switch makes `security` fail without running anything, so a test never reads a real login", async () => {
   const srv = await mockServer();
   const { exec } = c.testOverrides({ [c.TEST_ENV.noKeychain]: "1" });
   const { client } = makeClient(tmpCreds(FRESH), srv.base, { platform: "darwin", exec });
   const token = await client.getToken();
   assert.deepEqual(token, { kind: "ok", token: FRESH.accessToken }, "falls through to the credentials file");
-  await assert.rejects(exec("security", ["find-generic-password"]), /switched off in tests/);
+  await assert.rejects(exec("security", ["find-generic-password"]), (e) => /switched off in tests/.test(e.message) && e.code === 44, "and says what a Keychain with no item says");
   srv.close();
 });

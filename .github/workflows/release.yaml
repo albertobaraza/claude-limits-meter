@@ -15,8 +15,10 @@ on:
       - main
   workflow_dispatch:
 
+# One release at a time on main. Keyed by ref, so a manual run on another branch is a different group and can never take the
+# place of a run of main that is waiting.
 concurrency:
-  group: release
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -29,18 +31,24 @@ jobs:
   release:
     name: GitHub release
     needs: test
-    if: github.repository == 'albertobaraza/claude-limits-meter'
+    # Only main releases. A manual run (workflow_dispatch) can be started on any branch, and a branch must not be able to
+    # tag a release or, below, publish to the Marketplace: that would go around the protection of main.
+    if: github.repository == 'albertobaraza/claude-limits-meter' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: write
     outputs:
       version: ${{ steps.meta.outputs.version }}
+      vsix_name: ${{ steps.vsix.outputs.name }}
+      vsix_sha256: ${{ steps.vsix.outputs.sha256 }}
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
           cache: npm
@@ -60,12 +68,35 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
-      # No install scripts: this job holds a token that can write to the repository.
+      # No install scripts: this job holds a token that can write to the repository. Built on every run, also when the
+      # release exists already (a manual retry of a failed publish), so that the file published is always a build of the
+      # commit the test job has just passed, and never a file that was lying around.
       - name: Build the .vsix
-        if: steps.meta.outputs.exists == 'false'
         run: |
           npm ci --ignore-scripts
           npm run package
+
+      # The checksum is computed here, by this job, and checked by the publish job before it publishes anything.
+      - name: Record the checksum of the .vsix
+        id: vsix
+        run: |
+          set -euo pipefail
+          files=(./*.vsix)
+          if [ "${#files[@]}" -ne 1 ]; then
+            echo "Expected exactly one .vsix, found ${#files[@]}." >&2
+            exit 1
+          fi
+          echo "name=$(basename "${files[0]}")" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(sha256sum "${files[0]}" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      # Handed to the publish job as an artifact of this run: nothing of anybody else's can take its place on the way.
+      - name: Keep the .vsix for the publish job
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: vsix
+          path: ./*.vsix
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Publish the GitHub release
         if: steps.meta.outputs.exists == 'false'
@@ -83,7 +114,7 @@ jobs:
   publish:
     name: VS Code Marketplace
     needs: release
-    if: vars.PUBLISH_TO_MARKETPLACE == 'true'
+    if: vars.PUBLISH_TO_MARKETPLACE == 'true' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -91,20 +122,36 @@ jobs:
       id-token: write # lets vsce ask GitHub for the OIDC token the Marketplace trusts
     env:
       VERSION: ${{ needs.release.outputs.version }}
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
+      VSIX_NAME: ${{ needs.release.outputs.vsix_name }}
+      VSIX_SHA256: ${{ needs.release.outputs.vsix_sha256 }}
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
           cache: npm
 
-      # The file the Marketplace gets is the one the GitHub release holds, not a second build of it.
-      - name: Download the .vsix of the release
-        run: gh release download "v${VERSION}" --pattern '*.vsix' --dir dist
+      # The file the Marketplace gets is the one the release job built in this run and tested, not whatever the GitHub release
+      # holds under that tag: release assets and tags can be replaced by anyone with write access, and the checksum below
+      # is the one the release job computed.
+      - name: Download the .vsix built in this run
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: vsix
+          path: dist
+
+      - name: Check it is the file the release job built
+        run: |
+          set -euo pipefail
+          if [ "$(find dist -type f | wc -l)" -ne 1 ] || [ ! -f "dist/${VSIX_NAME}" ]; then
+            echo "dist must hold exactly dist/${VSIX_NAME}." >&2
+            exit 1
+          fi
+          echo "${VSIX_SHA256}  dist/${VSIX_NAME}" | sha256sum -c -
 
       - name: Install vsce
         run: npm ci --ignore-scripts
@@ -119,5 +166,5 @@ jobs:
           if [ "${published}" = "${VERSION}" ]; then
             echo "${id} ${VERSION} is already on the Marketplace: nothing to do."
           else
-            npx vsce publish --oidc --packagePath dist/*.vsix
+            npx vsce publish --oidc --packagePath "dist/${VSIX_NAME}"
           fi

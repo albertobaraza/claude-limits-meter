@@ -26,6 +26,7 @@ CHECKS=(
     "VS Code stable (ubuntu-latest)"
     "VS Code stable (macos-latest)"
     "VS Code stable (windows-latest)"
+    "UI (ubuntu-latest)"
     "Changelog & version"
     "Commit messages"
     "File hygiene"

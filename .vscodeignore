@@ -3,6 +3,7 @@
 .vscode/**
 .vscode-test/**
 scripts/**
+docs/**
 src/**
 test/**
 node_modules/**

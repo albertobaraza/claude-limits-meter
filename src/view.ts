@@ -45,8 +45,9 @@ function usageText(fiveHour: number, sevenDay: number, showWeekly: boolean): str
   return showWeekly ? `5h ${five} · 7d ${Math.trunc(sevenDay)}%` : five;
 }
 
+/** Text for the trusted tooltip: one line (a newline could start a fence, a heading or a list) with every Markdown mark escaped. */
 export function escapeMarkdown(s: string): string {
-  return s.replace(/[\\`*_{}[\]()#+\-.!|<>]/g, "\\$&");
+  return s.replace(/\s+/g, " ").replace(/[\\`*_{}[\]()#+\-.!|<>~=&$]/g, "\\$&");
 }
 
 /** "2m" until the time the rate limit lets the next check run, or "now" once it has passed. */

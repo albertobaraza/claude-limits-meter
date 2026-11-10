@@ -5,3 +5,13 @@ out/
 
 # Local backlog, not meant to be shared or reviewed; see the `todo` skill.
 /TODO.md
+
+# Credentials and keys never belong in the repository (a login looks like .credentials.json).
+.env
+.env.*
+*.pem
+*.key
+.credentials.json
+
+# Personal editor settings. The rest of .vscode/ (launch, tasks, extensions) is shared and stays tracked.
+.vscode/settings.json

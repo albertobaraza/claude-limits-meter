@@ -145,9 +145,62 @@ covered by CI. If the branch name starts with an issue number (`42/...`), start 
 ## Claude Code
 
 The project carries instructions for Claude Code in [CLAUDE.md](CLAUDE.md) and skills in `.claude/skills/`: `commit`,
-`pr`, `changelog`, `ci`, `run`, `release` and `todo`. By default Claude works with you: its skills confirm before
+`pr`, `changelog`, `ci`, `run`, `release`, `todo` and `security-audit` (see "Security review" below). By default Claude works with you: its skills confirm before
 committing or opening a pull request, and **you push**. `.claude/settings.json` denies Claude `git push`, `gh pr merge`
 and publishing.
 
 The `todo` skill keeps a local, untracked `TODO.md` at the repo root as a scratch backlog: it turns the entries into
 GitHub issues (on the "Claude" project board, with a priority) and clears them from the file.
+
+## Security review
+
+Claude Code's built-in `/security-review` reads only the pending diff, so it cannot ask how the checks we already have
+combine into a way in. For that this repo carries Cloudflare's
+[`security-audit` skill](https://github.com/cloudflare/security-audit-skill) (MIT) in
+[`.claude/skills/security-audit`](.claude/skills/security-audit), an unchanged copy pinned to the upstream commit named in
+its [`UPSTREAM.md`](.claude/skills/security-audit/UPSTREAM.md), which also says how to update it. It tells an agent to
+run things, so read what changed upstream before moving the pin. (If the built-in stops with "ambiguous argument
+'origin/HEAD...'", the clone has no remote HEAD: `git remote set-head origin main` sets it, locally and without the network.)
+
+**Who is lower-trust here**, which the skill asks before it calls anything a vulnerability:
+
+- the network, and whatever answers for `api.anthropic.com` and `console.anthropic.com` (a proxy, a captive portal);
+- the repository open in the window: its `.vscode/settings.json` and files are written by someone other than the user;
+- other accounts on a shared machine (who can read the credentials file), and anyone who can open a pull request or run the
+  release workflow.
+
+Other extensions and anything else running as the user are not a boundary: they can already read `~/.claude`
+([`SECURITY.md`](SECURITY.md), "Out of scope"). [`CLAUDE.md`](CLAUDE.md) ("Rules that are not negotiable") and
+`SECURITY.md` ("In scope") say what we promise about tokens, and decide what we fix.
+
+**Run `/security-audit` on any branch that touches** `src/claude.ts`, `src/extension.ts`, `package.json`'s settings,
+`.github/workflows/` or `scripts/`, and point it at the checklists that fit the change. They are in the skill's folder:
+
+| Change | Checklist |
+| --- | --- |
+| The login: reading the credentials file or the Keychain, writing a renewed one back | [`DESKTOP-MOBILE-AND-LOCAL-IPC.md`](.claude/skills/security-audit/DESKTOP-MOBILE-AND-LOCAL-IPC.md) (local-file and credential-store classes) |
+| The requests to Anthropic: the token refresh, the usage call, redirects, what an error or response may carry | [`WEB-PROTOCOL-AND-AUTH.md`](.claude/skills/security-audit/WEB-PROTOCOL-AND-AUTH.md) (token and key exposure; the identity classes mostly do not apply, we are a client) |
+| Workflows, `release.yaml`, trusted publishing, Dependabot, the `.vsix` contents (`.vscodeignore`) | [`SUPPLY-CHAIN-AND-RELEASE.md`](.claude/skills/security-audit/SUPPLY-CHAIN-AND-RELEASE.md) (CI, release authorization, plugin trust) |
+| Text from outside shown in the tooltip or menu | [`ATTACK-CLASSES.md`](.claude/skills/security-audit/ATTACK-CLASSES.md) (injection); the browser-only classes in `CLIENT-SIDE.md` do not apply |
+
+Memory safety, the RPC, cloud, AI and data-isolation checklists do not apply here.
+
+The skill's bar is higher than `SECURITY.md`'s scope, and that is on purpose. It confirms a finding only when a
+lower-trust principal crosses a boundary and gets something; a gap that needs a network position, or that is only missing
+hardening, comes back as `needs_validation` or not at all. It also runs the target's code only inside an OS-enforced
+sandbox, and without one it says what it could not check: `npm test` and `npm run test:integration` are how a fix is
+proven here. Three rules from the skill hold for any security review, whatever tool does it:
+
+- **Only confirm a boundary that actually fails.** Name who is lower-trust, what they send, the control that should
+  stop them, and what they get. A guess about how it is deployed is a question to check, not a finding.
+- **Severity needs impact.** It cannot be higher than what was shown, and harm only to the person who caused it is not
+  a vulnerability.
+- **A missing defence-in-depth layer is not a finding.** A mutable dependency, a missing header or a best practice not
+  followed is only one when it opens a path that ends somewhere that matters.
+
+**A full audit** (ask Claude to "security audit this codebase": the skill's complete six-phase run over the whole repo,
+with its output left in its default folder, `~/security-audit-skill/claude-limits-meter/`, outside the repo and never
+committed) is costly: do not run it for every PR. The `quick` profile fits a repo this size. Run it again after a big
+change to the attack surface, such as a new request, a new place the login is written, or a change to the release
+workflow, and keep the run folder between runs, since each run reads the last one's ledger and goes after what it missed.
+Confirmed findings become issues of their own; the ones it cannot settle (`needs_validation`) become questions.

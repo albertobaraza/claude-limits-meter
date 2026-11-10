@@ -38,7 +38,7 @@ Not on the Marketplace yet. Build and install the `.vsix` yourself:
 ```bash
 git clone https://github.com/albertobaraza/claude-limits-meter.git
 cd claude-limits-meter
-npm ci
+npm ci --ignore-scripts
 npm run package                 # produces claude-limits-meter-<version>.vsix
 code --install-extension claude-limits-meter-*.vsix
 ```
@@ -49,7 +49,7 @@ Claude Code's access token lasts a few hours and Claude Code renews it whenever 
 
 If you would rather renew from here, turn on **`claudeLimitsMeter.refreshExpiredToken`**. It is **off by default** because:
 
-- refresh tokens rotate: if the renewed login cannot be written back, Claude Code may ask you to sign in again (the extension retries, keeps the new token in memory, and warns you);
+- refresh tokens rotate: if the renewed login cannot be written back, Claude Code may ask you to sign in again (the extension retries, keeps the new token in memory, and warns you). If Claude Code or another window saved a login while the renewal was in flight, that login is kept and nothing is overwritten, but two programs renewing the same token at the same moment can still sign one of them out;
 - it uses Claude Code's own OAuth client id, detected from the installed Claude Code extension.
 
 It never writes to the macOS Keychain, so the option has no effect on a Keychain-stored login.
@@ -58,10 +58,10 @@ It never writes to the macOS Keychain, so the option has no effect on a Keychain
 
 | Setting | Default | |
 | --- | --- | --- |
-| `claudeLimitsMeter.pollIntervalSeconds` | `60` | Seconds between checks (minimum 15). Checks are skipped while the window is unfocused. |
+| `claudeLimitsMeter.pollIntervalSeconds` | `60` | Seconds between checks (15 to 86400; a value outside that is clamped, and anything that is not a number means 60). Checks are skipped while the window is unfocused. |
 | `claudeLimitsMeter.showWeekly` | `false` | Show the 7-day weekly usage next to the 5-hour session in the status bar (`5h 42% · 7d 18%`). Off shows the 5-hour session alone. |
-| `claudeLimitsMeter.refreshExpiredToken` | `false` | See above. |
-| `claudeLimitsMeter.clientId` | `""` | OAuth client id for the option above; empty means auto-detect. |
+| `claudeLimitsMeter.refreshExpiredToken` | `false` | See above. Read from your User settings only: a workspace's `.vscode/settings.json` cannot switch it on. |
+| `claudeLimitsMeter.clientId` | `""` | OAuth client id for the option above; empty means auto-detect. User settings only, like the option above. |
 
 Commands: *Claude Limits Meter: Show Menu*, *Refresh Now*, *Open Credentials File*, *Open Settings*.
 
@@ -75,7 +75,7 @@ The usage endpoint answers `429` when it is asked too often, for example by clic
 ## Privacy and security
 
 - Reads your Claude Code login (file or Keychain) and sends the **access token only to `api.anthropic.com`** to read your usage. With token refresh switched on it also contacts `console.anthropic.com`. Nothing else is contacted, and there is no telemetry. No setting or environment variable of the installed extension changes where your token is sent (only a VS Code test host can point it at a fake API, and only one on your own machine).
-- Never writes your login unless you enable `refreshExpiredToken`, and then only in the credentials file.
+- Never writes your login unless you enable `refreshExpiredToken`, and then only in the credentials file. When it rewrites that file it leaves it readable by you only (mode 600).
 - No runtime dependencies, so there is no third-party code in the extension.
 - *Open Credentials File* shows the file in an editor. It contains live tokens, so be careful about screen sharing.
 
