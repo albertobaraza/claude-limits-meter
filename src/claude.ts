@@ -132,6 +132,16 @@ export class HttpError extends Error {
   }
 }
 
+/**
+ * An answer that is not the shape the API documents (not JSON, or fields missing). The message is fixed: the
+ * parser's own message quotes the start of the body, which must never reach the screen or the log.
+ */
+export class BadResponseError extends Error {
+  constructor(what: string) {
+    super(`${what}: unexpected response`);
+  }
+}
+
 const RETRY_AFTER_MIN_MS = 5_000;
 const RETRY_AFTER_MAX_MS = 60 * 60_000;
 
@@ -156,10 +166,17 @@ export function parseRetryAfter(value: string | null | undefined, now = Date.now
 
 // ── reading credentials ──────────────────────────────────────────────────────
 
+/** A bearer token is printable ASCII without a space: nothing else can be sent in a header, and Anthropic does not issue one. */
+const TOKEN_RE = /^[\x21-\x7e]+$/;
+
 function parseCreds(text: string): OAuthCreds | undefined {
   try {
     const creds = JSON.parse(text)?.claudeAiOauth;
-    return creds && typeof creds === "object" ? creds : undefined;
+    if (!creds || typeof creds !== "object") return undefined;
+    // A malformed access token is no token (the login then reads as expired). Handing it to fetch would make fetch throw an
+    // error that quotes the value, and that error is shown in the tooltip and written to the log.
+    if (typeof creds.accessToken !== "string" || !TOKEN_RE.test(creds.accessToken)) return { ...creds, accessToken: undefined };
+    return creds;
   } catch {
     return undefined;
   }
@@ -253,6 +270,7 @@ export class ClaudeClient {
   }
 
   private async refresh(refreshToken: string) {
+    const what = "Token refresh failed";
     const res = await fetch(this.opts.tokenUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json", "User-Agent": this.opts.userAgent },
@@ -261,10 +279,14 @@ export class ClaudeClient {
         refresh_token: refreshToken,
         client_id: await this.opts.clientId(),
       }),
+      // Never follow a redirect: a 307/308 would send this body, the refresh token, to whatever host it names.
+      redirect: "manual",
       signal: AbortSignal.timeout(15_000),
     });
-    if (!res.ok) throw new HttpError(res.status, "Token refresh failed");
-    return (await res.json()) as { access_token: string; refresh_token?: string; expires_in: number };
+    if (!res.ok) throw new HttpError(res.status, what); // a redirect is not ok either
+    const data = await readJson(res, what);
+    if (!isTokenResponse(data)) throw new BadResponseError(what);
+    return data;
   }
 
   /** Write the refreshed login back so Claude Code itself benefits too. Never throws. */
@@ -294,11 +316,43 @@ export class ClaudeClient {
         "User-Agent": this.opts.userAgent,
         Accept: "application/json",
       },
+      redirect: "manual", // see refresh(): the answer to a redirect is an error, not a second request
       signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) throw new HttpError(res.status, "Usage fetch failed", parseRetryAfter(res.headers.get("retry-after")));
-    return (await res.json()) as Usage;
+    const data = await readJson(res, "Usage fetch failed");
+    if (!data || typeof data !== "object" || Array.isArray(data)) throw new BadResponseError("Usage fetch failed");
+    return data as Usage;
   }
+}
+
+/** The body as JSON, or a `BadResponseError` that says nothing about what the body was. */
+async function readJson(res: Response, what: string): Promise<unknown> {
+  try {
+    return await res.json();
+  } catch {
+    throw new BadResponseError(what);
+  }
+}
+
+interface TokenResponse {
+  access_token: string;
+  refresh_token?: string;
+  expires_in: number;
+}
+
+/** What the token endpoint must have answered before anything of it is written over the login on disk. */
+function isTokenResponse(d: unknown): d is TokenResponse {
+  if (!d || typeof d !== "object") return false;
+  const t = d as Record<string, unknown>;
+  return (
+    typeof t.access_token === "string" &&
+    TOKEN_RE.test(t.access_token) &&
+    typeof t.expires_in === "number" &&
+    Number.isFinite(t.expires_in) &&
+    t.expires_in > 0 &&
+    (t.refresh_token === undefined || (typeof t.refresh_token === "string" && t.refresh_token !== ""))
+  );
 }
 
 async function writeCreds(opts: ClaudeOptions, next: OAuthCreds) {
@@ -318,13 +372,24 @@ async function writeCreds(opts: ClaudeOptions, next: OAuthCreds) {
   }
 }
 
-/** Find the OAuth client id Claude Code ships with, in the given extension directories. */
+/**
+ * Claude Code's bundle holds several OAuth configurations next to each other: the production one, a local-development one and
+ * a design client, in an order the bundler decides. Each looks like `CLIENT_ID:"<uuid>",DESIGN_CLIENT_ID:"<uuid>",
+ * OAUTH_FILE_SUFFIX:"<suffix>",...`, and only the production one has an empty suffix (a local or custom one has `-local-oauth`
+ * or similar). A refresh token must be presented under the client id it was issued to, so a configuration with a suffix is
+ * skipped, and so is a `DESIGN_CLIENT_ID`, which ends in the same text.
+ */
+const CLIENT_ID_CONFIG = /(?<![A-Za-z0-9_])CLIENT_ID:"([0-9a-f-]{36})"([^}]{0,600})/g;
+
+/** Find the production OAuth client id Claude Code ships with, in the given extension directories. */
 export async function findClientId(extensionDirs: string[]): Promise<string | undefined> {
   for (const dir of extensionDirs) {
     try {
       const js = await fs.readFile(path.join(dir, "extension.js"), "utf8");
-      const m = /CLIENT_ID:"([0-9a-f-]{36})"/.exec(js);
-      if (m) return m[1];
+      for (const m of js.matchAll(CLIENT_ID_CONFIG)) {
+        const suffix = /OAUTH_FILE_SUFFIX:"([^"]*)"/.exec(m[2]);
+        if (!suffix || suffix[1] === "") return m[1];
+      }
     } catch {
       // not there, try the next one
     }
