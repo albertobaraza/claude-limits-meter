@@ -161,6 +161,81 @@ test("refresh failure with nothing fresh on disk throws, without leaking the res
   srv.close();
 });
 
+test("a redirect from the token endpoint is not followed: the refresh token goes nowhere else", async () => {
+  const elsewhere = await mockServer({ "/other": json({ access_token: "X", expires_in: 3600 }) });
+  for (const status of [301, 302, 307, 308]) {
+    const file = tmpCreds(EXPIRED);
+    const srv = await mockServer({ "/token": (_, res) => ((res.statusCode = status), res.setHeader("location", `${elsewhere.base}/other`), res.end()) });
+    const { client } = makeClient(file, srv.base, { refreshEnabled: () => true });
+    await assert.rejects(client.getToken(), (e) => e instanceof c.HttpError && e.status === status, `HTTP ${status}`);
+    assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).claudeAiOauth.accessToken, "OLD", "the login is untouched");
+    srv.close();
+  }
+  assert.deepEqual(elsewhere.requests, [], "the other host was never contacted, so it never saw the refresh token");
+  elsewhere.close();
+});
+
+test("a redirect from the usage endpoint is not followed either", async () => {
+  const elsewhere = await mockServer({ "/other": json({}) });
+  const srv = await mockServer({ "/usage": (_, res) => ((res.statusCode = 307), res.setHeader("location", `${elsewhere.base}/other`), res.end()) });
+  const { client } = makeClient("unused", srv.base);
+  await assert.rejects(client.fetchUsage("TOK"), (e) => e instanceof c.HttpError && e.status === 307);
+  assert.deepEqual(elsewhere.requests, []);
+  elsewhere.close();
+  srv.close();
+});
+
+test("a token answer that is not the documented shape is an error and leaves the login on disk alone", async () => {
+  const answers = [
+    ["{}", (_, res) => res.end("{}")],
+    ["an error object", json({ error: "invalid_grant" })],
+    ["no expiry", json({ access_token: "NEW" })],
+    ["a zero expiry", json({ access_token: "NEW", expires_in: 0 })],
+    ["an expiry that is not a number", json({ access_token: "NEW", expires_in: "3600" })],
+    ["an empty access token", json({ access_token: "", expires_in: 3600 })],
+    ["an access token with a newline", json({ access_token: "NEW\nTOKEN", expires_in: 3600 })],
+    ["an access token with a space", json({ access_token: "NEW TOKEN", expires_in: 3600 })],
+    ["an access token that is not ASCII", json({ access_token: "NEW\u00e9", expires_in: 3600 })],
+    ["a refresh token that is not a string", json({ access_token: "NEW", refresh_token: 7, expires_in: 3600 })],
+    ["null", (_, res) => res.end("null")],
+    ["an array", (_, res) => res.end("[]")],
+  ];
+  for (const [what, handler] of answers) {
+    const file = tmpCreds(EXPIRED);
+    const before = fs.readFileSync(file, "utf8");
+    const srv = await mockServer({ "/token": handler });
+    const { client, warnings } = makeClient(file, srv.base, { refreshEnabled: () => true });
+    await assert.rejects(client.getToken(), (e) => e instanceof c.BadResponseError && e.message === "Token refresh failed: unexpected response", what);
+    assert.equal(fs.readFileSync(file, "utf8"), before, `${what}: the file is byte for byte as it was`);
+    assert.deepEqual(warnings, []);
+    srv.close();
+  }
+});
+
+test("a body that is not JSON is reported without quoting any of it", async () => {
+  const body = "<html>captive portal secret-body</html>";
+  const srv = await mockServer({ "/token": (_, res) => res.end(body), "/usage": (_, res) => res.end(body) });
+  const { client } = makeClient(tmpCreds(EXPIRED), srv.base, { refreshEnabled: () => true });
+  for (const call of [() => client.getToken(), () => client.fetchUsage("TOK")]) {
+    await assert.rejects(call(), (e) => {
+      assert.ok(e instanceof c.BadResponseError);
+      assert.ok(/: unexpected response$/.test(e.message));
+      assert.ok(!e.message.includes("html") && !e.message.includes("secret-body") && !e.message.includes("portal"), e.message);
+      return true;
+    });
+  }
+  srv.close();
+});
+
+test("a usage answer that is not an object is an error", async () => {
+  for (const body of ["null", "[]", '"text"', "7"]) {
+    const srv = await mockServer({ "/usage": (_, res) => res.end(body) });
+    const { client } = makeClient("unused", srv.base);
+    await assert.rejects(client.fetchUsage("TOK"), (e) => e instanceof c.BadResponseError, body);
+    srv.close();
+  }
+});
+
 test("a renewed login that cannot be saved is kept in memory and the user is warned", { skip: isWindows || isRoot }, async () => {
   const file = tmpCreds(EXPIRED);
   const dir = path.dirname(file);
@@ -313,12 +388,67 @@ test("parseRetryAfter reads seconds or an HTTP date, clamps them, and ignores an
   for (const bad of [undefined, null, "", "soon"]) assert.equal(c.parseRetryAfter(bad, now), undefined, String(bad));
 });
 
+test("an access token that cannot be a header value reads as an expired login, and fetch never sees it", async () => {
+  for (const bad of ["A\nB", "A\r\nX-Evil: 1", "A\u0000B", "A B", "A\u00e9", "", 7, null, ["A"]]) {
+    const srv = await mockServer();
+    const { client } = makeClient(tmpCreds({ accessToken: bad, refreshToken: "R", expiresAt: NOW + 3_600_000 }), srv.base);
+    assert.deepEqual(await client.getToken(), { kind: "expired" }, JSON.stringify(bad));
+    assert.equal(srv.requests.length, 0);
+    srv.close();
+  }
+});
+
+test("a malformed access token does not stop a permitted renewal, and the renewed login replaces it", async () => {
+  const file = tmpCreds({ accessToken: "A\nB", refreshToken: "R1", expiresAt: NOW + 3_600_000 });
+  const srv = await mockServer({ "/token": json({ access_token: "NEW", refresh_token: "R2", expires_in: 3600 }) });
+  const { client } = makeClient(file, srv.base, { refreshEnabled: () => true });
+  assert.deepEqual(await client.getToken(), { kind: "ok", token: "NEW" });
+  assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).claudeAiOauth.accessToken, "NEW");
+  srv.close();
+});
+
+test("real Claude Code tokens (printable ASCII) pass", async () => {
+  const srv = await mockServer();
+  const token = "sk-ant-oat01-AbC_dEf-123~456.789=";
+  const { client } = makeClient(tmpCreds({ accessToken: token, refreshToken: "R", expiresAt: NOW + 3_600_000 }), srv.base);
+  assert.deepEqual(await client.getToken(), { kind: "ok", token });
+  srv.close();
+});
+
 test("findClientId reads CLIENT_ID from the first extension dir that has it", async () => {
   const empty = fs.mkdtempSync(path.join(os.tmpdir(), "ext-a-"));
   const withId = fs.mkdtempSync(path.join(os.tmpdir(), "ext-b-"));
   fs.writeFileSync(path.join(withId, "extension.js"), 'x={CLIENT_ID:"9d1c250a-e61b-44d9-88ed-5944d1962f5e",y:1}');
   assert.equal(await c.findClientId([empty, path.join(os.tmpdir(), "nonexistent-ext"), withId]), "9d1c250a-e61b-44d9-88ed-5944d1962f5e");
   assert.equal(await c.findClientId([empty]), undefined);
+});
+
+// The shape of Claude Code's bundle: configurations side by side, each with a suffix; production has an empty one.
+const LOCAL = 'CLIENT_ID:"22422756-60c9-4084-8eb7-27705fd5cf9a",DESIGN_CLIENT_ID:"00000000-0000-4000-8000-000000000000",OAUTH_FILE_SUFFIX:"-local-oauth",MCP_PROXY_URL:"http://localhost:8205"';
+const PROD = 'CLIENT_ID:"9d1c250a-e61b-44d9-88ed-5944d1962f5e",DESIGN_CLIENT_ID:"59637612-477b-4836-a601-b0589eda7704",OAUTH_FILE_SUFFIX:"",MCP_PROXY_URL:"https://mcp-proxy.example"';
+const extDir = (js) => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), "ext-c-"));
+  fs.writeFileSync(path.join(d, "extension.js"), js);
+  return d;
+};
+
+test("findClientId picks the production client id, whatever order the bundle lists its configurations in", async () => {
+  const prod = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
+  assert.equal(await c.findClientId([extDir(`a={${LOCAL}};b={${PROD}}`)]), prod, "local first (Claude Code 2.1.319)");
+  assert.equal(await c.findClientId([extDir(`a={${PROD}};b={${LOCAL}}`)]), prod, "production first");
+  assert.equal(await c.findClientId([extDir(`a={${LOCAL}};b={${PROD}};c={${PROD}};d={${LOCAL}}`)]), prod, "each configuration twice");
+  assert.equal(await c.findClientId([extDir(`a={${LOCAL}};b={${LOCAL.replace("-local-oauth", "-custom-oauth")}};c={${PROD}}`)]), prod, "any non-empty suffix is not production");
+});
+
+test("findClientId never returns a configuration with a suffix, a DESIGN_CLIENT_ID, or nothing at all", async () => {
+  const onlyLocal = extDir(`a={${LOCAL}}`);
+  assert.equal(await c.findClientId([onlyLocal]), undefined, "only a local configuration");
+  const production = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
+  assert.equal(await c.findClientId([onlyLocal, extDir(`a={${PROD}}`)]), production, "an older extension directory is tried next");
+  assert.equal(await c.findClientId([extDir('a={DESIGN_CLIENT_ID:"59637612-477b-4836-a601-b0589eda7704"}')]), undefined, "DESIGN_CLIENT_ID is not CLIENT_ID");
+  assert.equal(await c.findClientId([extDir('a={MY_CLIENT_ID:"59637612-477b-4836-a601-b0589eda7704"}')]), undefined, "nor is any other name that ends the same way");
+  assert.equal(await c.findClientId([extDir('a={CLIENT_ID:"not-a-uuid"}')]), undefined);
+  assert.equal(await c.findClientId([extDir('x={CLIENT_ID:"9d1c250a-e61b-44d9-88ed-5944d1962f5e"}')]), production, "a bundle that names no suffix at all (an older shape) still works");
 });
 
 // ── formatting ───────────────────────────────────────────────────────────────

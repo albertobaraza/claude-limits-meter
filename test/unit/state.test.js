@@ -10,6 +10,10 @@ const {
   MIN_REFRESH_GAP_MS,
   DEFAULT_BACKOFF_MS,
   MAX_BACKOFF_MS,
+  pollIntervalMs,
+  userSetting,
+  MAX_POLL_SECONDS,
+  MAX_TIMER_MS,
 } = require("../../out/state.js");
 const { HttpError } = require("../../out/claude.js");
 
@@ -156,4 +160,67 @@ test("recovering replaces an error with a fresh reading", async () => {
   assert.equal(recovered.status, "ok");
   assert.equal(recovered.error, undefined);
   assert.equal(recovered.snapshot.fiveHour, 36.4);
+});
+
+// ── settings ─────────────────────────────────────────────────────────────────
+
+test("the poll interval is at least 15 s, and the default when the setting is not a number", () => {
+  assert.equal(pollIntervalMs(60), 60_000);
+  assert.equal(pollIntervalMs(30), 30_000);
+  assert.equal(pollIntervalMs(15), 15_000);
+  assert.equal(pollIntervalMs(1), 15_000, "below the minimum");
+  assert.equal(pollIntervalMs(0), 15_000);
+  assert.equal(pollIntervalMs(-5), 15_000);
+  for (const odd of ["abc", "30", "", null, undefined, NaN, Infinity, -Infinity, {}, [], true]) {
+    assert.equal(pollIntervalMs(odd), 60_000, `${String(odd)} falls back to the default`);
+  }
+});
+
+test("a rate limit still waits when the poll setting was nonsense (no NaN delay)", () => {
+  const limited = { status: "rateLimited", retryAt: 1_000_000 + 120_000 };
+  const delay = nextPollDelay(limited, pollIntervalMs("abc"), 1_000_000);
+  assert.ok(Number.isFinite(delay));
+  assert.equal(delay, 120_000);
+});
+
+test("a setting only the user may set comes from User settings, never from the workspace", () => {
+  assert.deepEqual(userSetting({ defaultValue: false }, false), { value: false, ignoredWorkspaceValue: false });
+  assert.deepEqual(userSetting({ defaultValue: false, globalValue: true }, false), { value: true, ignoredWorkspaceValue: false });
+  assert.deepEqual(
+    userSetting({ defaultValue: false, workspaceValue: true }, false),
+    { value: false, ignoredWorkspaceValue: true },
+    "a workspace value is not used, and is reported",
+  );
+  assert.deepEqual(userSetting({ defaultValue: false, workspaceFolderValue: true }, false), { value: false, ignoredWorkspaceValue: true });
+  assert.deepEqual(
+    userSetting({ defaultValue: "", globalValue: "user-id", workspaceValue: "repo-id" }, ""),
+    { value: "user-id", ignoredWorkspaceValue: true },
+    "the User value wins, whatever the workspace says",
+  );
+  assert.deepEqual(userSetting(undefined, "x"), { value: "x", ignoredWorkspaceValue: false }, "no information: the fallback");
+  assert.deepEqual(userSetting({ globalValue: false, defaultValue: true }, true).value, false, "an explicit false is kept");
+});
+
+test("the poll interval has a ceiling too, so no setting can overflow the timer", () => {
+  assert.equal(MAX_POLL_SECONDS, 86_400);
+  assert.equal(pollIntervalMs(86_400), 86_400_000);
+  assert.equal(pollIntervalMs(86_401), 86_400_000, "just over the ceiling");
+  assert.equal(pollIntervalMs(2_147_483), 86_400_000, "about the largest delay a timer can hold, in seconds");
+  assert.equal(pollIntervalMs(3_000_000), 86_400_000, "the value a repository's settings file could ship");
+  assert.equal(pollIntervalMs(1e308), 86_400_000);
+  assert.equal(pollIntervalMs(Number.MAX_VALUE), 86_400_000);
+  for (const s of [15, 60, 3600, 86_400, 3e6, 1e308, -1, 0]) {
+    const ms = pollIntervalMs(s);
+    assert.ok(Number.isFinite(ms) && ms >= 15_000 && ms <= MAX_TIMER_MS, `${s} -> ${ms}`);
+  }
+});
+
+test("the wait after a rate limit can never exceed what a timer can hold either", () => {
+  assert.equal(MAX_TIMER_MS, 2_147_483_647);
+  const now = 1_000_000;
+  assert.equal(nextPollDelay({ status: "ok" }, 60_000, now), 60_000);
+  assert.equal(nextPollDelay({ status: "rateLimited", retryAt: now + 120_000 }, 60_000, now), 120_000);
+  assert.equal(nextPollDelay({ status: "ok" }, 1e12, now), MAX_TIMER_MS, "an oversized interval that did not come through pollIntervalMs");
+  assert.equal(nextPollDelay({ status: "rateLimited", retryAt: now + 1e12 }, 60_000, now), MAX_TIMER_MS);
+  assert.equal(nextPollDelay({ status: "rateLimited", retryAt: Infinity }, 60_000, now), MAX_TIMER_MS);
 });
