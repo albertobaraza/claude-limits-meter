@@ -43,6 +43,47 @@ export const MIN_REFRESH_GAP_MS = 10_000;
 export const DEFAULT_BACKOFF_MS = 2 * 60_000;
 export const MAX_BACKOFF_MS = 30 * 60_000;
 
+export const MIN_POLL_SECONDS = 15;
+export const DEFAULT_POLL_SECONDS = 60;
+/** A day: far above any useful interval, and far below the longest delay a timer can hold. */
+export const MAX_POLL_SECONDS = 24 * 60 * 60;
+/** `setTimeout` runs a delay above this (2^31-1 ms, about 24.8 days) after 1 ms instead. */
+export const MAX_TIMER_MS = 2 ** 31 - 1;
+
+/**
+ * The delay between checks from the `pollIntervalSeconds` setting, between 15 s and a day. Anything but a finite number
+ * (a string in a hand-edited settings file) is the default. Both ends matter: `Math.max(15, "abc")` is NaN and a delay above
+ * `MAX_TIMER_MS` is replaced by 1 ms, and either one makes the timer fire at once, over and over, which also turns the wait
+ * after a 429 into nothing, so the extension would ask the API as fast as it answers.
+ */
+export function pollIntervalMs(seconds: unknown): number {
+  const n = typeof seconds === "number" && Number.isFinite(seconds) ? seconds : DEFAULT_POLL_SECONDS;
+  return Math.min(MAX_POLL_SECONDS, Math.max(MIN_POLL_SECONDS, n)) * 1000;
+}
+
+/** The parts of `WorkspaceConfiguration.inspect()` used below, so this file needs no `vscode` import. */
+export interface SettingInspection<T> {
+  defaultValue?: T;
+  globalValue?: T;
+  workspaceValue?: T;
+  workspaceFolderValue?: T;
+}
+
+/**
+ * A setting only the user may set: the User-settings value, else the default, else `fallback`. A value that came from
+ * the workspace is never used, because a repository's `.vscode/settings.json` is written by whoever wrote the repository.
+ * `ignoredWorkspaceValue` says one was there, so the caller can log that it was not used.
+ */
+export function userSetting<T>(
+  info: SettingInspection<T> | undefined,
+  fallback: T,
+): { value: T; ignoredWorkspaceValue: boolean } {
+  return {
+    value: info?.globalValue ?? info?.defaultValue ?? fallback,
+    ignoredWorkspaceValue: info?.workspaceValue !== undefined || info?.workspaceFolderValue !== undefined,
+  };
+}
+
 /** The time (epoch ms) before which no request may be sent, or 0 when we are not rate limited. */
 export function retryAt(state: State): number {
   return state.status === "rateLimited" ? (state.retryAt ?? 0) : 0;
@@ -50,7 +91,7 @@ export function retryAt(state: State): number {
 
 /** How long the timer waits before the next automatic check: the interval, or longer while rate limited. */
 export function nextPollDelay(state: State, intervalMs: number, now = Date.now()): number {
-  return Math.max(intervalMs, retryAt(state) - now);
+  return Math.min(MAX_TIMER_MS, Math.max(intervalMs, retryAt(state) - now));
 }
 
 /** The earliest time (epoch ms) a manual refresh may reach the API, given when the last check started. */
