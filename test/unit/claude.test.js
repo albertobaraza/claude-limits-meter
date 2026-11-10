@@ -721,12 +721,23 @@ test("the login can only be sent to the loopback, however the environment is set
   }
 });
 
+test("on macOS, a test host with the Keychain switched off reads and renews the file login like any other platform", async () => {
+  // This is what the integration test does on a macOS runner: the seam's stub must read as "the Keychain holds no login".
+  const { exec } = c.testOverrides({ [c.TEST_ENV.noKeychain]: "1" });
+  const file = tmpCreds(EXPIRED);
+  const srv = await mockServer({ "/token": json({ access_token: "NEW", refresh_token: "R2", expires_in: 3600 }) });
+  const { client } = makeClient(file, srv.base, { platform: "darwin", exec, refreshEnabled: () => true });
+  assert.deepEqual(await client.getToken(), { kind: "ok", token: "NEW" });
+  assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).claudeAiOauth.accessToken, "NEW", "written back to the file");
+  srv.close();
+});
+
 test("the Keychain switch makes `security` fail without running anything, so a test never reads a real login", async () => {
   const srv = await mockServer();
   const { exec } = c.testOverrides({ [c.TEST_ENV.noKeychain]: "1" });
   const { client } = makeClient(tmpCreds(FRESH), srv.base, { platform: "darwin", exec });
   const token = await client.getToken();
   assert.deepEqual(token, { kind: "ok", token: FRESH.accessToken }, "falls through to the credentials file");
-  await assert.rejects(exec("security", ["find-generic-password"]), /switched off in tests/);
+  await assert.rejects(exec("security", ["find-generic-password"]), (e) => /switched off in tests/.test(e.message) && e.code === 44, "and says what a Keychain with no item says");
   srv.close();
 });
