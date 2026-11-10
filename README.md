@@ -71,10 +71,13 @@ The usage endpoint answers `429` when it is asked too often, for example by clic
 
 - *Refresh Now* asks the API at most once every 10 seconds; in between it just shows what it already has.
 - After a `429` the item shows a clock icon with the last reading, and the tooltip says when the next check happens. It waits for the time Claude asks for (`Retry-After`), or 2 minutes when Claude gives none, doubling on every further `429` up to 30 minutes. *Refresh Now* does not ask again before that, and the normal checks resume by themselves.
+- Claude's usage endpoint sends `Retry-After: 0` with its `429`s, which is not a wait. A `Retry-After` of under 5 seconds counts as no hint, so the 2 minutes (and the doubling) apply.
+- **Several VS Code windows** on the same machine (and so the same login) ask Claude about as often as one. Every window runs its own copy of the extension, so they share what they find out through a small file: a window that just took a reading lets the others show it, and a window told to wait by a `429` makes the others wait too, so switching windows never asks again in the middle of a wait. *Refresh Now* still asks for a fresh reading unless another window took one in the last 10 seconds.
 
 ## Privacy and security
 
 - Reads your Claude Code login (file or Keychain) and sends the **access token only to `api.anthropic.com`** to read your usage. With token refresh switched on it also contacts `console.anthropic.com`. Nothing else is contacted, and there is no telemetry. No setting or environment variable of the installed extension changes where your token is sent (only a VS Code test host can point it at a fake API, and only one on your own machine).
+- Keeps one small file in the extension's storage folder, on the machine that runs the extension, so the windows can share what they find out: the last reading, when a `429` says to wait until, and a one-way fingerprint of the login (a truncated SHA-256 of the access token, so a reading is never shown for another account). It holds no token, and the file is readable by you only (mode 600).
 - Never writes your login unless you enable `refreshExpiredToken`, and then only in the credentials file. When it rewrites that file it leaves it readable by you only (mode 600).
 - No runtime dependencies, so there is no third-party code in the extension.
 - *Open Credentials File* shows the file in an editor. It contains live tokens, so be careful about screen sharing.

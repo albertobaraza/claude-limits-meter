@@ -42,14 +42,18 @@ from here without stripping them first**, or it installs into the developer's ow
 
 ## Architecture
 
-Four modules in `src/`, three of them with no `vscode` import so plain node tests them:
+Five modules in `src/`, four of them with no `vscode` import so plain node tests them:
 
 - **`claude.ts`**: where the login is read from (macOS Keychain, then `~/.claude/.credentials.json`; the file only on
   Linux, Windows, WSL and remote hosts), the opt-in token renewal, the usage request, and the formatting helpers
   (`bar`, `pctText`, `timeLeft`). `ClaudeClient` takes every environment-dependent thing (paths, URLs, platform, `exec`,
   clock) as an option, which is how the tests run it against a mock server and a stubbed `security` command.
-- **`state.ts`**: the `State` (`loading | ok | noCreds | expired | error`, plus the last good reading) and `check()`, which
-  turns one request into the next state and never throws.
+- **`state.ts`**: the `State` (`loading | ok | noCreds | expired | rateLimited | error`, plus the last good reading) and
+  `check()`, which turns one request into the next state and never throws. With a `Sharing` it first asks the store what
+  the other windows found (a wait they are in, a reading they just took) and tells it what this request found.
+- **`shared.ts`**: what the windows of one machine tell each other: a `SharedStore` (a JSON file in the extension's
+  storage folder, replaced whole by write-then-rename) holding the last reading and the end of a 429 wait, keyed by
+  `loginId` (a truncated SHA-256 of the access token). Best effort: a failure reads as "nothing known".
 - **`view.ts`**: a `State` as status-bar text, tooltip Markdown and click-menu entries. Pure strings.
 - **`extension.ts`**: the VS Code glue only: the status-bar item, the timer (60 s, skipped while the window is
   unfocused), the commands and the settings. Keep logic out of it; it is covered by the integration test, not the unit tests.
@@ -65,6 +69,8 @@ the UI side.
   able to store the new one logs Claude Code out. Renewal (`refreshExpiredToken`) is off by default and file-only.
 - **If a renewed login cannot be written back, keep it in memory and warn**: the old refresh token is already dead.
 - **The login is re-read on every check**, so a token Claude Code renewed meanwhile is picked up with no action here.
+- **The shared file holds no token**, only readings, a wait and `loginId` (a one-way fingerprint). A record is used only
+  for the login it was written for, and a bad file is read as empty. Keep it that way: it is not a place for credentials.
 - **No runtime dependencies.** `devDependencies` only. A new runtime dependency needs a reason in the PR.
 - **The only hosts contacted** are `api.anthropic.com` (usage) and, when renewal is on, `console.anthropic.com`. No
   telemetry. `README.md` ("Privacy and security") says so; change one, change the other.
@@ -82,7 +88,8 @@ the UI side.
 `test/unit/` mirrors `src/` and `scripts/` (run against the compiled `out/`). `test/integration/` is the real-VS-Code test:
 `run.js` starts VS Code with a throwaway HOME and a fake Claude API (`fake-api.js`, steered over HTTP by the suite), and
 `suite.js` runs inside the extension host with no framework, walking the one live extension through the states the API
-can put it in (no login, 200, 429, 401, 500, renewal) and reading the status-bar item through `TestApi`. It writes fake
+can put it in (no login, 200, 429, 401, 500, renewal, another window's reading or 429) and reading the status-bar item through
+`TestApi` (whose `checkNow()` forgets the shared file unless told not to: the suite plays another window by writing it). It writes fake
 logins only inside the throwaway HOME (`assertThrowaway` in `common.js`). `test/ui/` installs the packaged `.vsix` (a
 Production build: no DEV marker, no `TestApi`, so only states that need no network: no login and an expired one) and
 drives the real window with `playwright-core`, a dev dependency. `test/ui/Dockerfile` is the clean room for both.
