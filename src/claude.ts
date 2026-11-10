@@ -162,13 +162,15 @@ const REFRESH_RETRY_MS = 5 * 60_000;
 /** The longest lifetime a renewed access token may claim: a year is far above any real one and far below overflow. */
 const MAX_EXPIRES_IN_S = 365 * 24 * 60 * 60;
 
+/** A Retry-After shorter than this is not a hint: the usage endpoint answers `Retry-After: 0` to every 429. */
 const RETRY_AFTER_MIN_MS = 5_000;
 const RETRY_AFTER_MAX_MS = 60 * 60_000;
 
 /**
- * The Retry-After header as milliseconds: either a number of seconds or an HTTP date. Anything else is
- * `undefined`; a value that is too small or large is clamped, so an odd header can neither make us spin nor
- * park the bar for a day.
+ * The Retry-After header as milliseconds: either a number of seconds or an HTTP date. `undefined` for anything else
+ * and for a wait below `RETRY_AFTER_MIN_MS` (`0`, a date already past): the caller then backs off on its own, which
+ * a literal zero would have turned into asking again at the next tick. A value that is too large is clamped, so an
+ * odd header cannot park the bar for a day.
  */
 export function parseRetryAfter(value: string | null | undefined, now = Date.now()): number | undefined {
   const v = value?.trim();
@@ -181,7 +183,8 @@ export function parseRetryAfter(value: string | null | undefined, now = Date.now
     if (Number.isNaN(date)) return undefined;
     ms = date - now;
   }
-  return Math.min(Math.max(ms, RETRY_AFTER_MIN_MS), RETRY_AFTER_MAX_MS);
+  if (ms < RETRY_AFTER_MIN_MS) return undefined;
+  return Math.min(ms, RETRY_AFTER_MAX_MS);
 }
 
 // ── reading credentials ──────────────────────────────────────────────────────
