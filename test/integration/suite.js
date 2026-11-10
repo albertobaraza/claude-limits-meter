@@ -153,6 +153,19 @@ const checks = {
     assert.ok(!item.tooltip.includes("boom") && !item.tooltip.includes(FAKE_TOKENS.access), "the body must not be shown");
   },
 
+  async "a redirect from the API is not followed: VS Code's own fetch never sends the token on to the host it names"() {
+    // The same fake answers on `localhost`, which is another origin than the 127.0.0.1 the extension was given: a followed
+    // redirect would show up as a second request carrying the token.
+    const elsewhere = `${new URL(apiOrigin()).protocol}//localhost:${new URL(apiOrigin()).port}/api/oauth/usage`;
+    await answer(307, { headers: { location: elsewhere }, body: { redirected: true } });
+    await forgetRequests();
+    const item = await checked();
+    assert.equal(item.text, "$(sparkle) ✗ DEV");
+    assertIn(item.tooltip, "Usage fetch failed: HTTP 307", "the tooltip names the status, as for any other refusal");
+    const sent = (await requests()).filter((r) => r.endpoint === "usage");
+    assert.equal(sent.length, 1, `the redirect was followed: ${sent.length} requests reached the API`);
+  },
+
   async "it recovers when the API does"() {
     await answer(200, { body: reading(55.1, 20) });
     const item = await checked();
