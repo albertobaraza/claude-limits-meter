@@ -98,7 +98,11 @@ export function testOverrides(env: NodeJS.ProcessEnv): Partial<Pick<ClaudeOption
   const token = env[TEST_ENV.tokenUrl];
   if (usage) out.usageUrl = loopbackUrl(TEST_ENV.usageUrl, usage);
   if (token) out.tokenUrl = loopbackUrl(TEST_ENV.tokenUrl, token);
-  if (env[TEST_ENV.noKeychain]) out.exec = () => Promise.reject(new Error("the Keychain is switched off in tests"));
+  // "Switched off" reads as a Keychain that holds no login (exit 44), as on a Mac with no Claude Code item, so that a test on
+  // macOS reads and renews its fake file login like any other platform; any other failure would mean "could not ask".
+  if (env[TEST_ENV.noKeychain]) {
+    out.exec = () => Promise.reject(Object.assign(new Error("the Keychain is switched off in tests"), { code: SECURITY_ITEM_NOT_FOUND }));
+  }
   return out;
 }
 
