@@ -1,7 +1,7 @@
 // What the status bar is showing and how one check turns the previous state into the next.
 // Free of any `vscode` import, so it is unit-tested with plain node.
 
-import { HttpError, type ClaudeClient } from "./claude";
+import { HttpError, SafeError, type ClaudeClient } from "./claude";
 
 export interface Snapshot {
   fiveHour: number;
@@ -99,6 +99,31 @@ export function refreshAllowedAt(state: State, lastCheckAt: number): number {
   return Math.max(lastCheckAt + MIN_REFRESH_GAP_MS, retryAt(state));
 }
 
+/** An errno or TLS code such as ECONNREFUSED, ENOTFOUND, UND_ERR_CONNECT_TIMEOUT or CERT_HAS_EXPIRED. */
+const ERROR_CODE = /^[A-Z][A-Z0-9_]{2,40}$/;
+
+function errorCode(e: Error): string | undefined {
+  const cause = (e as { cause?: { code?: unknown; errors?: unknown } }).cause;
+  const nested = Array.isArray(cause?.errors) ? cause.errors.map((x) => (x as { code?: unknown } | undefined)?.code) : [];
+  return [(e as { code?: unknown }).code, cause?.code, ...nested].find((c): c is string => typeof c === "string" && ERROR_CODE.test(c));
+}
+
+/**
+ * The text an error becomes on screen and in the log. Our own errors (`SafeError`: a status code, a fixed message) as they are;
+ * a network failure by its code; anything else by its class alone. The message of any other error is somebody else's text, and
+ * a library is free to quote what it was given in it (fetch does, for a header value), so it is never shown.
+ */
+export function describeError(e: unknown): string {
+  if (e instanceof SafeError) return e.message;
+  if (!(e instanceof Error)) return "Unexpected error";
+  if (e.name === "TimeoutError" || e.name === "AbortError") return "Request timed out";
+  if (e.message === "fetch failed") {
+    const code = errorCode(e);
+    return code ? `Network error (${code})` : "Network error";
+  }
+  return `Unexpected error (${/^[A-Za-z][A-Za-z0-9_]{0,40}$/.test(e.name) ? e.name : "Error"})`;
+}
+
 /** One check. Never throws: a failure becomes the next state. */
 export async function check(
   client: Pick<ClaudeClient, "getToken" | "fetchUsage">,
@@ -109,7 +134,8 @@ export async function check(
   const snapshot = prev.snapshot;
   try {
     const result = await client.getToken();
-    if (result.kind === "none") return { status: "noCreds", snapshot };
+    // The reading belonged to a login that is gone (a logout, or an account that is about to be replaced): not shown any more.
+    if (result.kind === "none") return { status: "noCreds" };
     if (result.kind === "expired") return { status: "expired", snapshot };
 
     const data = await client.fetchUsage(result.token);
@@ -124,7 +150,7 @@ export async function check(
       },
     };
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = describeError(e);
     log(message);
     // Claude rejected a token that looked valid: same situation as one that is known to have expired.
     if (e instanceof HttpError && e.status === 401) return { status: "expired", snapshot };

@@ -34,6 +34,12 @@
   "activationEvents": [
     "onStartupFinished"
   ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "The extension reads your Claude Code login and sends it to Anthropic, and a workspace's settings could steer it: it runs only in a workspace you trust."
+    }
+  },
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
