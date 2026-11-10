@@ -4,7 +4,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { CREDS_PATH, ClaudeClient, defaultOptions, findClientId, testOverrides } from "./claude";
+import { CREDS_PATH, ClaudeClient, SafeError, defaultOptions, findClientId, testOverrides } from "./claude";
 import {
   INITIAL_STATE,
   check,
@@ -47,6 +47,8 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
   let inFlight: Promise<void> | undefined;
   let lastPollAt = 0;
   let timer: NodeJS.Timeout | undefined;
+  /** Set on deactivation: a check still in flight must not draw, or arm the timer again, after that. */
+  let disposed = false;
 
   const cfg = () => vscode.workspace.getConfiguration(SETTINGS);
   const intervalMs = () => pollIntervalMs(cfg().get<unknown>("pollIntervalSeconds"));
@@ -84,7 +86,7 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
     }
     const id = await findClientId(dirs);
     if (!id) {
-      throw new Error(
+      throw new SafeError(
         "Claude Code extension not found, so the OAuth client id is unknown. " +
           `Install anthropic.claude-code or set ${SETTINGS}.clientId.`,
       );
@@ -92,11 +94,14 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
     return id;
   }
 
+  let renewalOn = userOnly<boolean>("refreshExpiredToken", false) === true;
+
   const client = new ClaudeClient({
     ...defaultOptions({
       userAgent: `claude-limits-meter/${context.extension.packageJSON.version}`,
       refreshEnabled: () => userOnly<boolean>("refreshExpiredToken", false) === true, // only a real `true`: the string "false" is not
       clientId: resolveClientId,
+      onNote: logLine,
       onWarn: (message) => {
         logLine(message);
         void vscode.window.showWarningMessage(`Claude Limits Meter: ${message}`);
@@ -122,7 +127,7 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
     inFlight ??= (async () => {
       lastPollAt = Date.now();
       state = await check(client, state, logLine);
-      render();
+      if (!disposed) render();
     })().finally(() => {
       inFlight = undefined;
     });
@@ -130,8 +135,10 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
   }
 
   function schedule() {
+    if (disposed) return;
     clearTimeout(timer);
     timer = setTimeout(async () => {
+      if (disposed) return;
       if (vscode.window.state.focused) await poll(); // nobody is looking at an unfocused window
       schedule();
     }, nextPollDelay(state, intervalMs())); // longer than the interval while Claude is rate limiting us
@@ -183,7 +190,12 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
   context.subscriptions.push(
     log,
     item,
-    { dispose: () => clearTimeout(timer) },
+    {
+      dispose: () => {
+        disposed = true;
+        clearTimeout(timer);
+      },
+    },
     vscode.commands.registerCommand(CMD_MENU, showMenu),
     vscode.commands.registerCommand(CMD_REFRESH, refreshNow),
     vscode.commands.registerCommand(CMD_OPEN_CREDS, openCredentials),
@@ -196,7 +208,14 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration(`${SETTINGS}.pollIntervalSeconds`)) schedule();
       if (e.affectsConfiguration(`${SETTINGS}.showWeekly`)) render();
-      if (e.affectsConfiguration(`${SETTINGS}.refreshExpiredToken`)) void refreshNow();
+      if (e.affectsConfiguration(`${SETTINGS}.refreshExpiredToken`)) {
+        // Only the user's own value counts (see userOnly): a repository rewriting its settings file is not a reason to check.
+        const on = userOnly<boolean>("refreshExpiredToken", false) === true;
+        if (on !== renewalOn) {
+          renewalOn = on;
+          void refreshNow();
+        }
+      }
     }),
   );
 

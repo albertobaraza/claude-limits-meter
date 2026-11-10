@@ -15,6 +15,7 @@ async function main() {
         throw new Error("unused: renewal is off");
       },
       onWarn: (message) => console.warn(`warning: ${message}`),
+      onNote: () => {},
     }),
   );
 
