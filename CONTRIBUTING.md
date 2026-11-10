@@ -70,10 +70,10 @@ The integration test, the coverage gate and the package check run in CI, not on 
 
 | Command | What it covers |
 | --- | --- |
-| `npm test` | Unit tests of `claude.ts`, `state.ts`, `view.ts` and the scripts, against a mock server and a stubbed `security` command |
+| `npm test` | Unit tests of `claude.ts`, `state.ts`, `shared.ts`, `view.ts` and the scripts, against a mock server and a stubbed `security` command |
 | `npm run test:coverage` | The same, failing under 90% lines / 85% branches / 80% functions |
 | `npm run test:package` | The `.vsix` holds what it should and nothing else |
-| `xvfb-run -a npm run test:integration` | The extension loaded in a real VS Code with a fake login and a fake Claude API: activates, registers its commands, has its settings, and shows the right status-bar item for no login, a reading, 429, 401, 500 and a renewed login |
+| `xvfb-run -a npm run test:integration` | The extension loaded in a real VS Code with a fake login and a fake Claude API: activates, registers its commands, has its settings, and shows the right status-bar item for no login, a reading, 429, 401, 500, a renewed login, and another window's reading or 429 |
 | `xvfb-run -a -s "-screen 0 1280x800x24" npm run test:ui` | The packaged `.vsix` installed in a real VS Code and driven through its window (Playwright): the status-bar item, its hover and its menu, with screenshots in `.vscode-test/screenshots` |
 | `npm run test:integration:docker` | Both of the above in a clean Linux container (`test/ui/Dockerfile`, Node 22, Xvfb). A local convenience; CI uses the native runners |
 

@@ -4,6 +4,16 @@ All notable changes to this extension are documented here, following
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.3] - 2026-11-10
+
+### Changed
+
+- Several VS Code windows on the same machine now ask Claude about as often as one. A window that has just read your usage lets the others show that reading, and a window that Claude told to wait makes the others wait too, so switching windows no longer asks again in the middle of a wait. They share a small file in the extension's storage folder with the last reading, the end of the wait and a one-way fingerprint of your login, never a token. *Refresh Now* still asks for a fresh reading unless another window took one in the last 10 seconds.
+
+### Fixed
+
+- Claude's usage endpoint answers every rate limit (`429`) with `Retry-After: 0`, which was taken as a wait of a few seconds: the bar said "next check in 0m" and asked again every minute, keeping itself rate limited. That is now treated as no hint, so the wait starts at 2 minutes and doubles up to 30.
+
 ## [0.5.2] - 2026-11-10
 
 ### Changed

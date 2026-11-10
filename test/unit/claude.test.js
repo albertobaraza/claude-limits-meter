@@ -587,15 +587,36 @@ test("a usage answer with neither window in it is an error, not a reading of 0%"
   }
 });
 
-test("parseRetryAfter reads seconds or an HTTP date, clamps them, and ignores anything else", () => {
+test("parseRetryAfter reads seconds or an HTTP date, clamps a long wait, and ignores anything else", () => {
   const now = Date.parse("2026-01-01T00:00:00Z");
   assert.equal(c.parseRetryAfter("90", now), 90_000);
   assert.equal(c.parseRetryAfter(" 30 ", now), 30_000);
+  assert.equal(c.parseRetryAfter("5", now), 5_000, "the shortest wait that counts as a hint");
   assert.equal(c.parseRetryAfter("Thu, 01 Jan 2026 00:03:00 GMT", now), 180_000);
-  assert.equal(c.parseRetryAfter("0", now), 5_000, "never a tight loop");
-  assert.equal(c.parseRetryAfter("Wed, 31 Dec 2025 23:00:00 GMT", now), 5_000, "a date in the past");
   assert.equal(c.parseRetryAfter("999999", now), 3_600_000, "never parks the bar for hours");
   for (const bad of [undefined, null, "", "soon"]) assert.equal(c.parseRetryAfter(bad, now), undefined, String(bad));
+});
+
+test("a Retry-After that asks for no real wait is no hint at all, so the caller backs off by itself", () => {
+  const now = Date.parse("2026-01-01T00:00:00Z");
+  // The usage endpoint answers `Retry-After: 0` to every 429, which once became a 5 s wait and no backoff.
+  assert.equal(c.parseRetryAfter("0", now), undefined);
+  assert.equal(c.parseRetryAfter("4", now), undefined);
+  assert.equal(c.parseRetryAfter("Wed, 31 Dec 2025 23:00:00 GMT", now), undefined, "a date in the past");
+  assert.equal(c.parseRetryAfter("Thu, 01 Jan 2026 00:00:04 GMT", now), undefined);
+});
+
+test("a 429 with Retry-After: 0 carries no wait, so it is not mistaken for a hint", async () => {
+  const srv = await mockServer({
+    "/usage": (_, res) => {
+      res.statusCode = 429;
+      res.setHeader("retry-after", "0");
+      res.end();
+    },
+  });
+  const { client } = makeClient("unused", srv.base);
+  await assert.rejects(client.fetchUsage("TOK"), (e) => e instanceof c.HttpError && e.status === 429 && e.retryAfterMs === undefined);
+  srv.close();
 });
 
 test("an access token that cannot be a header value reads as an expired login, and fetch never sees it", async () => {

@@ -2,6 +2,7 @@
 // Free of any `vscode` import, so it is unit-tested with plain node.
 
 import { HttpError, SafeError, type ClaudeClient } from "./claude";
+import { loginId, type SharedRecord, type SharedStore } from "./shared";
 
 export interface Snapshot {
   fiveHour: number;
@@ -124,41 +125,100 @@ export function describeError(e: unknown): string {
   return `Unexpected error (${/^[A-Za-z][A-Za-z0-9_]{0,40}$/.test(e.name) ? e.name : "Error"})`;
 }
 
-/** One check. Never throws: a failure becomes the next state. */
+/** How the other windows of this machine take part in a check (see shared.ts). */
+export interface Sharing {
+  store: SharedStore;
+  /** A reading another window took less than this long ago is shown as it is, instead of asking the API again. */
+  reuseWithinMs: number;
+}
+
+/** A wait read from the shared file is cut to this: a corrupt file must not park the bar for days. */
+const MAX_SHARED_WAIT_MS = 60 * 60_000;
+
+/** The newer of two readings. */
+const newest = (a?: Snapshot, b?: Snapshot): Snapshot | undefined => (a && b && b.checkedAt > a.checkedAt ? b : (a ?? b));
+
+/**
+ * What another window already found out, as the state of this one, when that makes a request pointless: it is rate
+ * limited and the wait is not over, or it took a reading no longer ago than `reuseWithinMs`. `undefined` otherwise.
+ */
+function fromOtherWindow(
+  other: SharedRecord,
+  snapshot: Snapshot | undefined,
+  at: number,
+  reuseWithinMs: number,
+  log: (message: string) => void,
+): State | undefined {
+  const limit = other.rateLimit;
+  if (limit) {
+    if (limit.retryAt <= at) return undefined; // the wait is over: ask again, and a further 429 goes on counting
+    log(`Not asking: another window was rate limited, ${Math.ceil((limit.retryAt - at) / 1000)}s of its wait left`);
+    return {
+      status: "rateLimited",
+      snapshot,
+      retryAt: Math.min(limit.retryAt, at + MAX_SHARED_WAIT_MS),
+      rateLimitStreak: limit.streak,
+    };
+  }
+  const taken = other.snapshot?.checkedAt;
+  if (taken === undefined || taken > at || at - taken >= reuseWithinMs) return undefined; // too old, or from a clock gone back
+  log(`Not asking: another window took this reading ${Math.round((at - taken) / 1000)}s ago`);
+  return { status: "ok", snapshot };
+}
+
+/**
+ * One check. Never throws: a failure becomes the next state. With `sharing`, the other windows of this machine are asked
+ * first (nothing is sent while one of them waits out a 429, or has just read the usage) and told after what this request
+ * found, so that all of them together ask about as often as one.
+ */
 export async function check(
   client: Pick<ClaudeClient, "getToken" | "fetchUsage">,
   prev: State,
   log: (message: string) => void = () => {},
   now: () => number = Date.now,
+  sharing?: Sharing,
 ): Promise<State> {
-  const snapshot = prev.snapshot;
+  let snapshot = prev.snapshot;
+  let streak = prev.status === "rateLimited" ? (prev.rateLimitStreak ?? 0) : 0;
+  let login: string | undefined;
   try {
     const result = await client.getToken();
     // The reading belonged to a login that is gone (a logout, or an account that is about to be replaced): not shown any more.
     if (result.kind === "none") return { status: "noCreds" };
     if (result.kind === "expired") return { status: "expired", snapshot };
 
+    login = loginId(result.token);
+    const other = sharing ? await sharing.store.read(login) : undefined;
+    if (sharing && other) {
+      snapshot = newest(snapshot, other.snapshot);
+      streak = other.rateLimit?.streak ?? 0; // the last request anyone made is the one that counts
+      const reused = fromOtherWindow(other, snapshot, now(), sharing.reuseWithinMs, log);
+      if (reused) return reused;
+    }
+
     const data = await client.fetchUsage(result.token);
-    return {
-      status: "ok",
-      snapshot: {
-        fiveHour: data.five_hour?.utilization ?? 0,
-        fiveHourReset: data.five_hour?.resets_at,
-        sevenDay: data.seven_day?.utilization ?? 0,
-        sevenDayReset: data.seven_day?.resets_at,
-        checkedAt: now(),
-      },
+    const reading: Snapshot = {
+      fiveHour: data.five_hour?.utilization ?? 0,
+      fiveHourReset: data.five_hour?.resets_at,
+      sevenDay: data.seven_day?.utilization ?? 0,
+      sevenDayReset: data.seven_day?.resets_at,
+      checkedAt: now(),
     };
+    await sharing?.store.write(login, { snapshot: reading });
+    return { status: "ok", snapshot: reading };
   } catch (e) {
     const message = describeError(e);
     log(message);
     // Claude rejected a token that looked valid: same situation as one that is known to have expired.
     if (e instanceof HttpError && e.status === 401) return { status: "expired", snapshot };
     if (e instanceof HttpError && e.status === 429) {
-      // Believe the server's Retry-After; without one, back off exponentially so we stop adding to the load.
-      const streak = (prev.status === "rateLimited" ? (prev.rateLimitStreak ?? 0) : 0) + 1;
+      // Believe the server's Retry-After; without one (or with a useless one, see parseRetryAfter), back off
+      // exponentially so we stop adding to the load.
+      streak += 1;
       const wait = e.retryAfterMs ?? Math.min(DEFAULT_BACKOFF_MS * 2 ** (streak - 1), MAX_BACKOFF_MS);
-      return { status: "rateLimited", snapshot, retryAt: now() + wait, rateLimitStreak: streak };
+      const until = now() + wait;
+      if (login) await sharing?.store.write(login, { snapshot, rateLimit: { retryAt: until, streak } });
+      return { status: "rateLimited", snapshot, retryAt: until, rateLimitStreak: streak };
     }
     return { status: "error", error: message, snapshot };
   }

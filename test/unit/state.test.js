@@ -17,6 +17,7 @@ const {
   MAX_TIMER_MS,
 } = require("../../out/state.js");
 const { HttpError, BadResponseError, SafeError } = require("../../out/claude.js");
+const { loginId } = require("../../out/shared.js");
 
 const USAGE = {
   five_hour: { utilization: 36.4, resets_at: "2026-01-01T05:00:00+00:00" },
@@ -253,4 +254,217 @@ test("the wait after a rate limit can never exceed what a timer can hold either"
   assert.equal(nextPollDelay({ status: "ok" }, 1e12, now), MAX_TIMER_MS, "an oversized interval that did not come through pollIntervalMs");
   assert.equal(nextPollDelay({ status: "rateLimited", retryAt: now + 1e12 }, 60_000, now), MAX_TIMER_MS);
   assert.equal(nextPollDelay({ status: "rateLimited", retryAt: Infinity }, 60_000, now), MAX_TIMER_MS);
+});
+
+// ── the other windows of this machine (sharing) ──────────────────────────────
+
+const LOGIN = loginId("T"); // the token the stand-in client hands out
+
+/** A store that lives in memory, keyed by login like the file, that counts what is asked of it. */
+const memoryStore = (records = {}) => ({
+  records,
+  reads: 0,
+  writes: 0,
+  async read(login) {
+    this.reads++;
+    return this.records[login];
+  },
+  async write(login, record) {
+    this.writes++;
+    this.records = { [login]: record }; // one record, like the file: the last write replaces it
+  },
+  async clear() {
+    this.records = {};
+  },
+});
+
+/** The stand-in client, counting the requests it is made to send. */
+const counting = (options) => {
+  const inner = client(options);
+  const counted = { requests: 0, ...inner };
+  counted.fetchUsage = async (token) => {
+    counted.requests++;
+    return inner.fetchUsage(token);
+  };
+  return counted;
+};
+
+/** A window's own, older reading (PREV's has no time, which a real one always has). */
+const OLD = { status: "ok", snapshot: { fiveHour: 10, sevenDay: 20, checkedAt: NOW - 600_000 } };
+const READING = { fiveHour: 50, fiveHourReset: "2026-01-01T05:00:00+00:00", sevenDay: 60, sevenDayReset: null, checkedAt: NOW - 5_000 };
+const REUSE = 60_000;
+const sharing = (store, reuseWithinMs = REUSE) => ({ store, reuseWithinMs });
+const asked = (c, prev, store, { reuseWithinMs, logged = [] } = {}) =>
+  check(c, prev, (m) => logged.push(m), () => NOW, sharing(store, reuseWithinMs));
+
+test("another window's 429 is waited out: no request, the same wait and streak, the newest reading kept", async () => {
+  const store = memoryStore({ [LOGIN]: { snapshot: READING, rateLimit: { retryAt: NOW + 90_000, streak: 2 } } });
+  const c = counting();
+  const logged = [];
+  const next = await asked(c, OLD, store, { logged });
+  assert.equal(c.requests, 0, "nothing is sent while another window is told to wait");
+  assert.deepEqual(next, { status: "rateLimited", snapshot: READING, retryAt: NOW + 90_000, rateLimitStreak: 2 });
+  assert.match(logged.join("\n"), /another window was rate limited, 90s/);
+  assert.equal(store.writes, 0);
+});
+
+test("a window that already had a newer reading keeps it when it adopts another's 429", async () => {
+  const mine = { fiveHour: 70, sevenDay: 80, checkedAt: NOW - 1_000 };
+  const store = memoryStore({ [LOGIN]: { snapshot: READING, rateLimit: { retryAt: NOW + 5_000, streak: 1 } } });
+  const next = await asked(counting(), { status: "ok", snapshot: mine }, store);
+  assert.equal(next.snapshot, mine);
+});
+
+test("a wait in the shared file that no 429 could have asked for is cut down", async () => {
+  const store = memoryStore({ [LOGIN]: { rateLimit: { retryAt: NOW + 10 * 24 * 3_600_000, streak: 1 } } });
+  const next = await asked(counting(), INITIAL_STATE, store);
+  assert.equal(next.retryAt, NOW + 3_600_000);
+});
+
+test("when another window's wait is over, a request is sent, and a 429 to it goes on counting from that window's streak", async () => {
+  const store = memoryStore({ [LOGIN]: { snapshot: READING, rateLimit: { retryAt: NOW - 1, streak: 2 } } });
+  const c = counting({ usageError: new HttpError(429, "Usage fetch failed", undefined) });
+  const next = await asked(c, INITIAL_STATE, store);
+  assert.equal(c.requests, 1);
+  assert.equal(next.rateLimitStreak, 3);
+  assert.equal(next.retryAt - NOW, DEFAULT_BACKOFF_MS * 4, "2 min, 4 min, now 8 min");
+  assert.equal(next.snapshot, READING, "the reading another window took is still there to show");
+});
+
+test("a reading another window took a moment ago is shown as it is, and nothing is sent", async () => {
+  const store = memoryStore({ [LOGIN]: { snapshot: READING } });
+  const c = counting();
+  const logged = [];
+  const next = await asked(c, OLD, store, { logged });
+  assert.equal(c.requests, 0);
+  assert.deepEqual(next, { status: "ok", snapshot: READING });
+  assert.match(logged.join("\n"), /another window took this reading 5s ago/);
+});
+
+test("it clears a state that was not ok: a reading taken meanwhile by another window ends an error or a rate limit", async () => {
+  const store = memoryStore({ [LOGIN]: { snapshot: READING } });
+  for (const prev of [{ status: "error", error: "x", snapshot: OLD.snapshot }, { status: "rateLimited", retryAt: NOW - 1, rateLimitStreak: 3 }]) {
+    const next = await asked(counting(), prev, store);
+    assert.deepEqual(next, { status: "ok", snapshot: READING }, prev.status);
+  }
+});
+
+test("a reading is reused only inside the window the caller names: the interval for the timer, 10 s for a manual refresh", async () => {
+  const store = memoryStore({ [LOGIN]: { snapshot: READING } }); // taken 5 s ago
+  const timer = counting();
+  await asked(timer, OLD, store, { reuseWithinMs: 60_000 });
+  assert.equal(timer.requests, 0);
+
+  const manual = counting();
+  await asked(manual, OLD, store, { reuseWithinMs: MIN_REFRESH_GAP_MS });
+  assert.equal(manual.requests, 0, "5 s old is inside 10 s");
+
+  store.records[LOGIN].snapshot = { ...READING, checkedAt: NOW - 15_000 };
+  const stale = counting();
+  await asked(stale, OLD, store, { reuseWithinMs: MIN_REFRESH_GAP_MS });
+  assert.equal(stale.requests, 1, "15 s old is outside 10 s: the user asked for a fresh one");
+  store.records[LOGIN].snapshot = { ...READING, checkedAt: NOW - 15_000 }; // (that request replaced it)
+  const exactly = counting();
+  await asked(exactly, OLD, store, { reuseWithinMs: 15_000 });
+  assert.equal(exactly.requests, 1, "as old as the window is too old");
+});
+
+test("a reading dated in the future (a clock set back) is not reused", async () => {
+  const store = memoryStore({ [LOGIN]: { snapshot: { ...READING, checkedAt: NOW + 10 * 60_000 } } });
+  const c = counting();
+  await asked(c, OLD, store);
+  assert.equal(c.requests, 1);
+});
+
+test("a record for another login is not used: another account's reading and 429 mean nothing here", async () => {
+  const store = memoryStore({ [loginId("someone-else")]: { snapshot: READING, rateLimit: { retryAt: NOW + 90_000, streak: 4 } } });
+  const c = counting();
+  const next = await asked(c, INITIAL_STATE, store);
+  assert.equal(c.requests, 1);
+  assert.equal(next.status, "ok");
+  assert.equal(next.snapshot.fiveHour, 36.4, "the reading is the new one, not the other account's");
+});
+
+test("what a request finds is told to the other windows: a reading, or a 429 with its wait and the reading kept", async () => {
+  const store = memoryStore();
+  const ok = await asked(counting(), INITIAL_STATE, store);
+  assert.deepEqual(store.records[LOGIN], { snapshot: ok.snapshot });
+
+  const limited = await asked(counting({ usageError: new HttpError(429, "Usage fetch failed", 90_000) }), ok, store, { reuseWithinMs: 0 });
+  assert.deepEqual(store.records[LOGIN], { snapshot: ok.snapshot, rateLimit: { retryAt: NOW + 90_000, streak: 1 } });
+  assert.equal(limited.retryAt, NOW + 90_000);
+
+  store.records[LOGIN].rateLimit.retryAt = NOW - 1; // the wait is over
+  await asked(counting(), limited, store, { reuseWithinMs: 0 });
+  assert.equal(store.records[LOGIN].rateLimit, undefined, "a reading after a 429 ends it for every window");
+});
+
+test("an error, an expired login or no login tell the other windows nothing, and a missing login is not even looked up", async () => {
+  const store = memoryStore({ [LOGIN]: { snapshot: READING } });
+  const before = structuredClone(store.records);
+  for (const options of [
+    { usageError: new Error("offline") },
+    { usageError: new HttpError(500, "Usage fetch failed") },
+    { usageError: new HttpError(401, "Usage fetch failed") },
+  ]) {
+    await asked(counting(options), OLD, store, { reuseWithinMs: 0 });
+  }
+  assert.equal(store.writes, 0);
+  assert.deepEqual(store.records, before);
+
+  const reads = store.reads;
+  assert.deepEqual(await asked(counting({ token: { kind: "none" } }), OLD, store), { status: "noCreds" });
+  assert.equal((await asked(counting({ token: { kind: "expired" } }), OLD, store)).status, "expired");
+  assert.equal(store.reads, reads, "no token, nothing to look up");
+});
+
+test("without sharing a window behaves as it always did", async () => {
+  const next = await check(limited(undefined), PREV, () => {}, () => NOW);
+  assert.equal(next.retryAt - NOW, DEFAULT_BACKOFF_MS);
+  assert.equal((await check(client(), PREV)).status, "ok");
+});
+
+test("two windows on one machine ask about as often as one", async () => {
+  const store = memoryStore(); // the shared file
+  const api = { requests: 0, answer: "ok" };
+  const window = () => ({
+    state: INITIAL_STATE,
+    async poll(at, reuseWithinMs = REUSE) {
+      const c = {
+        getToken: async () => ({ kind: "ok", token: "T" }),
+        fetchUsage: async () => {
+          api.requests++;
+          if (api.answer === 429) throw new HttpError(429, "Usage fetch failed", undefined);
+          return USAGE;
+        },
+      };
+      this.state = await check(c, this.state, () => {}, () => at, sharing(store, reuseWithinMs));
+      return this.state;
+    },
+  });
+  const a = window();
+  const b = window();
+
+  // A reads; the user switches to B 20 s later: B shows A's reading, no second request.
+  await a.poll(NOW);
+  const shown = await b.poll(NOW + 20_000);
+  assert.equal(api.requests, 1);
+  assert.deepEqual(shown.snapshot, a.state.snapshot);
+
+  // A minute on, the API says no to whoever asks first (B).
+  api.answer = 429;
+  await b.poll(NOW + 80_000);
+  assert.equal(api.requests, 2);
+  assert.equal(b.state.status, "rateLimited");
+
+  // The user switches back to A: it does not know, and does not ask; it takes B's wait.
+  await a.poll(NOW + 100_000);
+  assert.equal(api.requests, 2, "A did not ask during B's wait");
+  assert.deepEqual([a.state.status, a.state.retryAt], ["rateLimited", b.state.retryAt]);
+
+  // The wait is over and the API still says no: the backoff goes on from where B left it, whoever asks.
+  await a.poll(b.state.retryAt + 1);
+  assert.equal(api.requests, 3);
+  assert.equal(a.state.rateLimitStreak, 2);
+  assert.equal(a.state.retryAt - (b.state.retryAt + 1), DEFAULT_BACKOFF_MS * 2);
 });
