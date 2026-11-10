@@ -7,6 +7,7 @@ const os = require("node:os");
 const path = require("node:path");
 const vscode = require("vscode");
 const { TEST_ENV } = require("../../out/claude.js");
+const { FileSharedStore, loginId } = require("../../out/shared.js");
 const { readLogin, removeLogin, writeLogin } = require("./common");
 const { FAKE_TOKENS, usageBody } = require("./fake-api");
 
@@ -250,6 +251,67 @@ const checks = {
       await cfg.update("refreshExpiredToken", undefined, vscode.ConfigurationTarget.Global);
       await cfg.update("clientId", undefined, vscode.ConfigurationTarget.Global);
     }
+  },
+
+  // ── another window of the same machine: it shares what it finds out through a file ──
+
+  async "another window's 429 is waited out: nothing is sent, and the item says so with the reading it has"() {
+    writeLogin(home());
+    await answer(200, { body: reading(61.2, 24) });
+    await checked(); // a reading of our own, to show while we wait
+    assert.equal(api.statusBar().text, "$(sparkle) 61% DEV");
+
+    // Play the other window: it has just been told to wait two minutes by the API.
+    const otherWindow = new FileSharedStore(api.sharedFile);
+    const login = loginId(readLogin(home()).accessToken);
+    await otherWindow.write(login, { rateLimit: { retryAt: Date.now() + 120_000, streak: 1 } });
+
+    await forgetRequests();
+    await api.checkNow({ keepShared: true });
+    assert.deepEqual(await requests(), [], "the other window's wait holds for this one too");
+    const item = api.statusBar();
+    assert.equal(item.text, "$(clock) 61% DEV");
+    assertIn(item.tooltip, "rate limiting", "the tooltip");
+    assertIn(item.tooltip, "Session (5h) **61%**", "the tooltip, still showing the last reading");
+
+    await vscode.commands.executeCommand("claudeLimitsMeter.refresh");
+    assert.deepEqual(await requests(), [], "Refresh Now does not get round it either");
+  },
+
+  async "a reading another window has just taken is shown without asking the API"() {
+    const otherWindow = new FileSharedStore(api.sharedFile);
+    const login = loginId(readLogin(home()).accessToken);
+    await otherWindow.write(login, {
+      snapshot: { fiveHour: 77, sevenDay: 33, fiveHourReset: inHours(1), sevenDayReset: inHours(48), checkedAt: Date.now() },
+    });
+    await forgetRequests();
+    await api.checkNow({ keepShared: true });
+    assert.deepEqual(await requests(), [], "no request for a reading that is seconds old");
+    const item = api.statusBar();
+    assert.equal(item.text, "$(sparkle) 77% DEV");
+    assertIn(item.tooltip, "Session (5h) **77%** · Weekly (7d) **33%**", "the tooltip");
+  },
+
+  async "a reading that is old by now is not reused: the API is asked, and the answer is told to the other windows"() {
+    const otherWindow = new FileSharedStore(api.sharedFile);
+    const login = loginId(readLogin(home()).accessToken);
+    await otherWindow.write(login, { snapshot: { fiveHour: 77, sevenDay: 33, checkedAt: Date.now() - 10 * 60_000 } });
+    await answer(200, { body: reading(80, 40) });
+    await forgetRequests();
+    await api.checkNow({ keepShared: true });
+    assert.equal((await requests()).length, 1);
+    assert.equal(api.statusBar().text, "$(sparkle) 80% DEV");
+    assert.equal((await otherWindow.read(login)).snapshot.fiveHour, 80, "the file now holds this window's reading");
+  },
+
+  async "a login that is not this one is not believed: another account's 429 does not stop this one"() {
+    const otherWindow = new FileSharedStore(api.sharedFile);
+    await otherWindow.write(loginId("another-accounts-token"), { rateLimit: { retryAt: Date.now() + 600_000, streak: 5 } });
+    await answer(200, { body: reading(10, 5) });
+    await forgetRequests();
+    await api.checkNow({ keepShared: true });
+    assert.equal((await requests()).length, 1);
+    assert.equal(api.statusBar().text, "$(sparkle) 10% DEV");
   },
 
   async "changing the poll interval is accepted"() {
