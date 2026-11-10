@@ -40,6 +40,11 @@ token to create, store or renew.
 
 To stop publishing, set `PUBLISH_TO_MARKETPLACE` to anything but `true`.
 
+Both release jobs run only on `main` (`github.ref == 'refs/heads/main'`), so a manual run of the workflow on another branch
+stops after the tests. The policy above does not look at the branch, and an empty Environment accepts any run of
+`release.yaml`: for a second lock, create a GitHub environment (for example `marketplace`) limited to `main`, fill in the
+policy's *Environment* with its name and add the same `environment:` to the `publish` job.
+
 ## Before the first public release
 
 - Make the repository public (the README, issue and homepage links in the listing point at it) and run

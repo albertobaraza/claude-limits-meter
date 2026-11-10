@@ -29,7 +29,9 @@ jobs:
   release:
     name: GitHub release
     needs: test
-    if: github.repository == 'albertobaraza/claude-limits-meter'
+    # Only main releases. A manual run (workflow_dispatch) can be started on any branch, and a branch must not be able to
+    # tag a release or, below, publish to the Marketplace: that would go around the protection of main.
+    if: github.repository == 'albertobaraza/claude-limits-meter' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -83,7 +85,7 @@ jobs:
   publish:
     name: VS Code Marketplace
     needs: release
-    if: vars.PUBLISH_TO_MARKETPLACE == 'true'
+    if: vars.PUBLISH_TO_MARKETPLACE == 'true' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
