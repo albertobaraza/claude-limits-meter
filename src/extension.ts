@@ -5,8 +5,10 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { CREDS_PATH, ClaudeClient, SafeError, defaultOptions, findClientId, testOverrides } from "./claude";
+import { FileSharedStore } from "./shared";
 import {
   INITIAL_STATE,
+  MIN_REFRESH_GAP_MS,
   check,
   nextPollDelay,
   pollIntervalMs,
@@ -29,8 +31,13 @@ const CMD_OPEN_SETTINGS = `${SETTINGS}.openSettings`;
 export interface TestApi {
   /** What the status-bar item shows right now. */
   statusBar(): { text: string; tooltip: string; backgroundColor?: string };
-  /** Waits for a check in flight, then runs a fresh one and returns once its result is on screen. */
-  checkNow(): Promise<void>;
+  /**
+   * Waits for a check in flight, then runs a fresh one and returns once its result is on screen. It first forgets what
+   * other windows left in the shared file, as if there were none, unless `keepShared` says to take it into account.
+   */
+  checkNow(options?: { keepShared?: boolean }): Promise<void>;
+  /** The file the windows share (see shared.ts), so a test can play another window. */
+  sharedFile: string;
 }
 
 export function activate(context: vscode.ExtensionContext): TestApi | undefined {
@@ -53,6 +60,11 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
   const cfg = () => vscode.workspace.getConfiguration(SETTINGS);
   const intervalMs = () => pollIntervalMs(cfg().get<unknown>("pollIntervalSeconds"));
   const logLine = (message: string) => log.appendLine(`${new Date().toISOString()} ${message}`);
+
+  // What the other windows of this machine found out, so that all of them together ask the API about as often as one.
+  // The extension's storage folder is on the machine that runs the extension, where the login is.
+  const sharedFile = path.join(context.globalStorageUri.fsPath, "shared.json");
+  const shared = new FileSharedStore(sharedFile);
 
   // The settings that decide whether the login is rewritten, and under which client id, are the user's alone: a repository's
   // .vscode/settings.json must not be able to switch them on. The value comes from User settings, never the workspace.
@@ -123,10 +135,12 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
   }
 
   // ── polling ──
-  function poll(): Promise<void> {
+  /** `manual`: the user asked, so a reading another window took a few seconds ago is not reused, only a fresher one. */
+  function poll(manual = false): Promise<void> {
     inFlight ??= (async () => {
       lastPollAt = Date.now();
-      state = await check(client, state, logLine);
+      const sharing = { store: shared, reuseWithinMs: manual ? MIN_REFRESH_GAP_MS : intervalMs() };
+      state = await check(client, state, logLine, Date.now, sharing);
       if (!disposed) render();
     })().finally(() => {
       inFlight = undefined;
@@ -155,7 +169,7 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
       return;
     }
     item.text = "$(sync~spin) …";
-    await poll();
+    await poll(true);
     schedule();
   }
 
@@ -231,10 +245,12 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
       // `id` is on every ThemeColor at runtime but missing from @types/vscode.
       backgroundColor: (item.backgroundColor as { id?: string } | undefined)?.id,
     }),
-    checkNow: async () => {
+    checkNow: async (options) => {
       await inFlight;
+      if (!options?.keepShared) await shared.clear();
       await poll();
     },
+    sharedFile,
   };
 }
 

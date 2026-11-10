@@ -8,7 +8,7 @@ const { execFileSync } = require("node:child_process");
 const path = require("node:path");
 
 // `vsce ls` prints source names; inside the .vsix it renames README.md, CHANGELOG.md and LICENSE.
-const MUST_HAVE = ["package.json", "README.md", "CHANGELOG.md", "LICENSE", "images/icon.png", "out/extension.js", "out/claude.js", "out/state.js", "out/view.js"];
+const MUST_HAVE = ["package.json", "README.md", "CHANGELOG.md", "LICENSE", "images/icon.png", "out/extension.js", "out/claude.js", "out/state.js", "out/view.js", "out/shared.js"];
 const MUST_NOT_HAVE = [
   /^src\//,
   /^test\//,
