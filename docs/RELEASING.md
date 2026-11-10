@@ -9,7 +9,9 @@ triggered by hand.
    It bumps `package.json`, `package-lock.json` and `CHANGELOG.md` together and commits them.
 2. Open the pull request. CI checks that the version matches the changelog and that no release has used it yet.
 3. Merge it. [`release.yaml`](../.github/workflows/release.yaml) then:
-   - runs the whole test workflow on the merged commit;
+   - does not run the tests again: `main` takes only a pull request whose required checks passed on a branch that was up
+     to date with `main` ([`scripts/protect-main.sh`](../scripts/protect-main.sh) sets that rule, for admins too), so the
+     merged commit is the one that was tested;
    - builds the `.vsix` from that commit, records its SHA-256 and keeps it as an artifact of the run;
    - if there is no release `vX.Y.Z` yet, tags `vX.Y.Z` and publishes a GitHub release with the changelog entry as its
      notes and that `.vsix` attached;

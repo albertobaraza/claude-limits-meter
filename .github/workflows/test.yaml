@@ -1,8 +1,9 @@
 name: Test
 
-# On every PR, and before every release: release.yaml calls this workflow, so a merge to main is
-# checked once, by the run that then releases it. A bare branch push does not run it: the
-# pre-push hook already typechecks and tests locally, and the PR run would only repeat this one.
+# On every PR, and before a manual release run: release.yaml calls this workflow only when started by
+# hand. A merge to main is not tested again: the PR run is the check, and main takes only a PR that
+# passed it (scripts/protect-main.sh). A bare branch push does not run it either: the pre-push hook
+# already typechecks and tests locally, and the PR run would only repeat this one.
 on:
   pull_request:
   workflow_call:
@@ -11,7 +12,7 @@ permissions:
   contents: read
 
 # A new push to a pull request makes the run for the previous commit pointless: cancel it. Any other
-# run (the one release.yaml calls on main) gets its own group, so it is never cancelled.
+# run (the one release.yaml calls on a manual run) gets its own group, so it is never cancelled.
 concurrency:
   group: test-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}

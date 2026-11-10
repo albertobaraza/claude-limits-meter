@@ -1,9 +1,14 @@
 name: Release
 
-# On a push to main: run the test workflow, then, if package.json names a version that has no GitHub
-# release yet, build the .vsix and publish the release (tag vX.Y.Z, the matching CHANGELOG.md section
-# as its notes, the .vsix attached). Nothing to trigger by hand: a version is released by merging the
-# pull request that bumped it.
+# On a push to main: if package.json names a version that has no GitHub release yet, build the .vsix
+# and publish the release (tag vX.Y.Z, the matching CHANGELOG.md section as its notes, the .vsix
+# attached). Nothing to trigger by hand: a version is released by merging the pull request that
+# bumped it.
+#
+# A push to main is not tested again here. Main takes only a pull request whose required checks
+# (test.yaml and ci.yml) passed on a branch that was up to date with main (scripts/protect-main.sh:
+# strict status checks, enforced for admins too), so the merged tree is the tree that was tested.
+# A manual run is the exception: it can start on any commit, so it runs the test workflow first.
 #
 # Publishing the same .vsix to the VS Code Marketplace is a second, opt-in job: it runs only when
 # the repository variable PUBLISH_TO_MARKETPLACE is "true". It signs in with Marketplace trusted
@@ -25,7 +30,9 @@ permissions:
   contents: read
 
 jobs:
+  # Only a manual run tests: a push to main was tested by its pull request (see the top of this file).
   test:
+    if: github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/test.yaml
 
   release:
@@ -33,7 +40,13 @@ jobs:
     needs: test
     # Only main releases. A manual run (workflow_dispatch) can be started on any branch, and a branch must not be able to
     # tag a release or, below, publish to the Marketplace: that would go around the protection of main.
-    if: github.repository == 'albertobaraza/claude-limits-meter' && github.ref == 'refs/heads/main'
+    # On a push the test job is skipped, and a job whose dependency was skipped is skipped too unless it says otherwise:
+    # hence !cancelled() with an explicit check that the tests did not fail. A failed or cancelled test stops the release.
+    if: >-
+      !cancelled()
+      && (needs.test.result == 'success' || needs.test.result == 'skipped')
+      && github.repository == 'albertobaraza/claude-limits-meter'
+      && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -70,7 +83,7 @@ jobs:
 
       # No install scripts: this job holds a token that can write to the repository. Built on every run, also when the
       # release exists already (a manual retry of a failed publish), so that the file published is always a build of the
-      # commit the test job has just passed, and never a file that was lying around.
+      # commit this run is on, and never a file that was lying around.
       - name: Build the .vsix
         run: |
           npm ci --ignore-scripts
@@ -135,7 +148,7 @@ jobs:
           node-version: 24
           cache: npm
 
-      # The file the Marketplace gets is the one the release job built in this run and tested, not whatever the GitHub release
+      # The file the Marketplace gets is the one the release job built in this run, not whatever the GitHub release
       # holds under that tag: release assets and tags can be replaced by anyone with write access, and the checksum below
       # is the one the release job computed.
       - name: Download the .vsix built in this run

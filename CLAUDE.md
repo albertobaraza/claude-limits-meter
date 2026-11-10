@@ -106,7 +106,7 @@ it instead of improvising. Never add a `Co-Authored-By` trailer.
 
 ## CI/CD
 
-- `.github/workflows/test.yaml`: on every PR and before every release. Typecheck and unit tests on Linux, macOS and Windows;
+- `.github/workflows/test.yaml`: on every PR (and before a manual release run). Typecheck and unit tests on Linux, macOS and Windows;
   on Linux also the coverage gate, the package-contents check and `npm audit` (high and up); and the integration test in
   a real VS Code (1.125.0 and stable on Linux, stable on macOS and Windows), and the UI test of the packaged `.vsix` on
   Linux only (the Docker image is a local convenience, not a CI path).
@@ -114,8 +114,10 @@ it instead of improvising. Never add a `Co-Authored-By` trailer.
   `src/` or `package.json` has a version no release has used and a changelog entry (`scripts/release-metadata.js`); every
   commit is a conventional one-liner (`scripts/check-commit-message.js`); the pre-commit hygiene hooks; `actionlint` over
   the workflows; and a Gitleaks scan of the full history.
-- `.github/workflows/release.yaml`: on push to `main`, runs `test.yaml`, then cuts `vX.Y.Z` as a GitHub release (changelog
-  section as notes, `.vsix` attached) if that version has none. Publishing to the Marketplace is a second job that runs
+- `.github/workflows/release.yaml`: on push to `main`, cuts `vX.Y.Z` as a GitHub release (changelog section as notes,
+  `.vsix` attached) if that version has none. It does not test again: `main` takes only a PR whose required checks passed on
+  a branch up to date with `main` (`scripts/protect-main.sh`: keep its `CHECKS` equal to the job names of `test.yaml` and
+  `ci.yml`, or a check is not enforced and nothing else catches it). A manual run does test first. Publishing to the Marketplace is a second job that runs
   only when the `PUBLISH_TO_MARKETPLACE` variable is `true`; it signs in with the publisher's trusted-publishing policy
   (OIDC, `vsce publish --oidc`), so there is no token secret (`docs/RELEASING.md`).
 - `.github/dependabot.yml`: one weekly PR covering npm and the workflow actions.
