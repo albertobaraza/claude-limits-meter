@@ -4,6 +4,29 @@ All notable changes to this extension are documented here, following
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-11-10
+
+### Changed
+
+- `claudeLimitsMeter.refreshExpiredToken` and `claudeLimitsMeter.clientId` are now read from your User settings only. A value in a workspace's `.vscode/settings.json` is ignored (the Output channel says so), so a repository can no longer switch token renewal on.
+- An unexpected error is shown by its type only, for example `Unexpected error (TypeError)`, a network failure with its code (`Network error (ECONNREFUSED)`) and a timeout as `Request timed out`. Text from a library, a token included, can no longer reach the hover, the menu or the Output channel.
+- When a renewal rewrites a credentials file that other users could read, the file is made readable by you only (mode 600), and the Output channel says so.
+- The extension is declared as not supported in untrusted workspaces, so Restricted Mode now says why it is off.
+
+### Fixed
+
+- A redirect from Anthropic's token endpoint can no longer carry your refresh token to another host. Redirects are refused, for the usage request as well.
+- With Claude Code 2.1.319, token renewal presented your login under the wrong OAuth client id, because that version lists a local-development client first. It now uses the production one.
+- A renewal no longer overwrites a login that Claude Code or another window saved while it was in flight. Theirs is kept and used.
+- An answer from the token endpoint that is not the expected shape, for example `{}`, no longer rewrites your credentials file without an access token. A login whose access token is malformed reads as expired, instead of showing an error that quoted it.
+- A refresh token the server refused is not sent again on every check: it waits five minutes, or tries at once when you sign in again.
+- After you log out or sign in as another account, the previous account's reading and renewed token are no longer shown or used.
+- On macOS, a Keychain that fails to answer (denied, locked, timed out) no longer lets a stale `~/.claude/.credentials.json` be renewed. Only a Keychain that says it holds no login does.
+- A very large or non-numeric `claudeLimitsMeter.pollIntervalSeconds` no longer makes the extension check continuously and ignore the rate-limit wait. The setting is now limited to 15 to 86400 seconds, and anything that is not a number means 60.
+- A usage answer with neither window in it is now an error, not a reading of 0%.
+- The credentials file is rewritten more safely: a file or link planted at a predictable temporary name is no longer written through, and the write is flushed to disk before it replaces your login.
+- A check still running when the extension is turned off or reloaded no longer starts the timer again.
+
 ## [0.5.0] - 2026-11-09
 
 ### Changed
