@@ -12,3 +12,6 @@ out/
 *.pem
 *.key
 .credentials.json
+
+# Personal editor settings. The rest of .vscode/ (launch, tasks, extensions) is shared and stays tracked.
+.vscode/settings.json
