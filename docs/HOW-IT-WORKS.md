@@ -18,9 +18,9 @@ The usage endpoint answers `429` when it is asked too often, for example by clic
 The extension is careful not to make that worse:
 
 - *Refresh Now* asks the API at most once every 10 seconds; in between it just shows what it already has.
-- After a `429` the item shows a clock icon with the last reading, and the tooltip says when the next check happens. It
-  waits for the time Claude asks for (`Retry-After`), or 2 minutes when Claude gives none, doubling on every further `429`
-  up to 30 minutes. *Refresh Now* does not ask again before that, and the normal checks resume by themselves.
+- After a `429` the item shows a clock icon with the last reading, and the extension retries by itself. It waits for
+  the time Claude asks for (`Retry-After`), or 2 minutes when Claude gives none, doubling on every further `429` up to
+  30 minutes. *Refresh Now* does not ask again before that, and the normal checks resume by themselves.
 - Claude's usage endpoint sends `Retry-After: 0` with its `429`s, which is not a wait. A `Retry-After` of under 5 seconds
   counts as no hint, so the 2 minutes (and the doubling) apply.
 

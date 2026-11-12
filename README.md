@@ -22,7 +22,7 @@ Hover the status bar item for a short summary of both windows. Click it for the 
 | Status bar | Meaning |
 | --- | --- |
 | `✦ 42%` | Your 5-hour session usage. With `claudeLimitsMeter.showWeekly` on: `✦ 5h 42% · 7d 18%`. |
-| `🕒 42%` | Claude asked for a pause. The last reading is shown, and the hover says when the next check happens. It resumes by itself. |
+| `🕒 42%` | Claude asked for a pause. The last reading is shown, and the extension retries by itself. |
 | `✦ !` | The stored Claude token has expired. It renews the next time you use Claude Code. |
 | `✦ —` | No Claude Code login found on this machine. |
 | `✦ ✗` | The check failed; hover for the reason, or see the *Claude Limits Meter* channel in the Output panel. The last reading is kept in the hover. |
@@ -74,7 +74,7 @@ Run them from the Command Palette (Ctrl+Shift+P / Cmd+Shift+P). The last three a
 
 ## When Claude asks you to wait
 
-Claude's usage endpoint answers `429` when it is asked too often. The item then shows a clock with your last reading, and the hover says when the next check happens. Checks resume by themselves, and *Refresh Now* does not ask before then. *Refresh Now* also asks Claude at most once every 10 seconds.
+Claude's usage endpoint answers `429` when it is asked too often. The item then shows a clock with your last reading. Checks resume by themselves, and *Refresh Now* does not ask before then. *Refresh Now* also asks Claude at most once every 10 seconds.
 
 With several VS Code windows open on the same machine, they ask Claude about as often as one and all show the same numbers, even the windows you are not looking at. [How it works](docs/HOW-IT-WORKS.md) has the details: the waits, how the windows share what they find, and what is kept on disk.
 
