@@ -321,6 +321,25 @@ const checks = {
     assert.equal(api.statusBar().text, "$(sparkle) 10% DEV");
   },
 
+  async "the text turns yellow from 90% in either window, and goes back when the usage falls"() {
+    const yellow = "charts.yellow";
+    await answer(200, { body: reading(42, 18) });
+    assert.equal((await checked()).color, undefined, "below 90% the text keeps the status bar's own colour");
+
+    await answer(200, { body: reading(90, 10) });
+    let item = await checked();
+    assert.equal(item.text, "$(sparkle) 90% DEV");
+    assert.equal(item.color, yellow, "the 5-hour session at 90%");
+
+    await answer(200, { body: reading(10, 93) });
+    item = await checked();
+    assert.equal(item.text, "$(sparkle) 10% DEV", "the week is not in the text (showWeekly is off)...");
+    assert.equal(item.color, yellow, "...and still turns it yellow");
+
+    await answer(200, { body: reading(89.9, 89.9) });
+    assert.equal((await checked()).color, undefined, "89.9 is shown as 89%, so it is not yellow");
+  },
+
   async "a reading another window takes appears here by itself: no check, no request"() {
     await answer(200, { body: reading(20, 10) });
     await checked();

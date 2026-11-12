@@ -1,7 +1,7 @@
 // What each state looks like (src/view.ts): status-bar text, tooltip Markdown and the click menu.
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { statusView, menuEntries, devView, escapeMarkdown, SETTINGS } = require("../../out/view.js");
+const { statusView, menuEntries, devView, escapeMarkdown, SETTINGS, WARN_PCT } = require("../../out/view.js");
 
 const NOW = Date.parse("2026-01-01T00:00:00Z");
 const COMMANDS = { refresh: "ext.refresh", openCredentials: "ext.openCreds", openSettings: "ext.openSettings" };
@@ -44,6 +44,32 @@ test("showWeekly puts the 7-day week next to the 5-hour session in the status-ba
   assert.equal(both({ status: "ok", snapshot: SNAPSHOT }).markdown, view({ status: "ok", snapshot: SNAPSHOT }).markdown);
 });
 
+test("the text is flagged to turn yellow from 90% in the 5-hour session or in the 7-day week", () => {
+  const warn = (fiveHour, sevenDay, status = "ok", options = {}) =>
+    statusView({ status, snapshot: { ...SNAPSHOT, fiveHour, sevenDay }, retryAt: NOW + 1000 }, COMMANDS, NOW, options).warn;
+  assert.equal(WARN_PCT, 90);
+  assert.equal(warn(42.9, 18), false);
+  assert.equal(warn(89.9, 89.9), false, "89.9 shows as 89%, so it is not flagged either");
+  assert.equal(warn(90, 10), true, "the session alone");
+  assert.equal(warn(10, 90), true, "the week alone");
+  assert.equal(warn(100, 100), true);
+  // It does not depend on the week being in the text: a week at 95% is a warning even when only the session is shown.
+  assert.equal(warn(10, 95, "ok", { showWeekly: false }), true);
+  assert.equal(warn(10, 95, "ok", { showWeekly: true }), true);
+  // A rate limit still shows the last reading, so it is flagged the same way.
+  assert.equal(warn(95, 10, "rateLimited"), true);
+  assert.equal(warn(50, 10, "rateLimited"), false);
+});
+
+test("a text with no number in it is never flagged, however high the old reading was", () => {
+  const high = { ...SNAPSHOT, fiveHour: 99, sevenDay: 99 };
+  for (const status of ["loading", "noCreds", "expired", "error"]) {
+    assert.equal(view({ status, snapshot: high, error: "x" }).warn, false, status);
+  }
+  assert.equal(view({ status: "ok" }).warn, false, "no reading");
+  assert.equal(view({ status: "rateLimited", retryAt: NOW + 1000 }).warn, false, "no reading yet");
+});
+
 test("the hover is a short summary of both windows and when they were last checked, with no bars", () => {
   const { markdown } = view({ status: "ok", snapshot: SNAPSHOT });
   assert.match(markdown, /Session \(5h\) \*\*42%\*\* · Weekly \(7d\) \*\*18%\*\*/);
@@ -59,6 +85,8 @@ test("a development build marks the text and the tooltip, and keeps everything e
   assert.match(dev.markdown, /^\$\(beaker\) \*\*Development build\*\*, not the installed extension\n\n/);
   assert.ok(dev.markdown.endsWith(plain.markdown), "the tooltip is the normal one underneath");
   assert.equal(plain.text, "$(sparkle) 42%", "devView does not change its input");
+  const high = { status: "ok", snapshot: { ...SNAPSHOT, fiveHour: 95 } };
+  assert.equal(devView(view(high)).warn, true, "the colour flag survives the DEV marker");
 });
 
 test("loading", () => {
