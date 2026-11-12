@@ -40,6 +40,13 @@ const inHours = (h) => new Date(Date.now() + h * 3_600_000).toISOString();
 const reading = (fiveHour, sevenDay) =>
   usageBody({ fiveHour, sevenDay, fiveHourResets: inHours(2), sevenDayResets: inHours(72) });
 
+/** Waits for the item to show `text`: what arrives with no check of ours, because another window wrote the shared file. */
+async function itemShows(text, within = 10_000) {
+  const end = Date.now() + within;
+  while (api.statusBar().text !== text && Date.now() < end) await new Promise((r) => setTimeout(r, 50));
+  assert.equal(api.statusBar().text, text, `the item should have come to show it within ${within} ms`);
+}
+
 /** Runs a check on the extension and returns what its status-bar item shows. */
 async function checked() {
   await api.checkNow();
@@ -312,6 +319,40 @@ const checks = {
     await api.checkNow({ keepShared: true });
     assert.equal((await requests()).length, 1);
     assert.equal(api.statusBar().text, "$(sparkle) 10% DEV");
+  },
+
+  async "a reading another window takes appears here by itself: no check, no request"() {
+    await answer(200, { body: reading(20, 10) });
+    await checked();
+    assert.equal(api.statusBar().text, "$(sparkle) 20% DEV");
+
+    const otherWindow = new FileSharedStore(api.sharedFile);
+    const login = loginId(readLogin(home()).accessToken);
+    await forgetRequests();
+    await otherWindow.write(login, {
+      snapshot: { fiveHour: 88, sevenDay: 44, fiveHourReset: inHours(1), sevenDayReset: inHours(48), checkedAt: Date.now() },
+    });
+    await itemShows("$(sparkle) 88% DEV");
+    assertIn(api.statusBar().tooltip, "Session (5h) **88%** · Weekly (7d) **44%**", "the tooltip");
+    assert.deepEqual(await requests(), [], "following the other window asks nothing");
+  },
+
+  async "another window's 429 appears here by itself, with the reading we have"() {
+    const otherWindow = new FileSharedStore(api.sharedFile);
+    const login = loginId(readLogin(home()).accessToken);
+    await forgetRequests();
+    await otherWindow.write(login, { rateLimit: { retryAt: Date.now() + 120_000, streak: 1 } });
+    await itemShows("$(clock) 88% DEV");
+    assertIn(api.statusBar().tooltip, "rate limiting", "the tooltip");
+    assert.deepEqual(await requests(), [], "nothing is sent");
+  },
+
+  async "a reading another window takes after its 429 ends the wait here too"() {
+    const otherWindow = new FileSharedStore(api.sharedFile);
+    const login = loginId(readLogin(home()).accessToken);
+    await otherWindow.write(login, { snapshot: { fiveHour: 30, sevenDay: 15, checkedAt: Date.now() } });
+    await itemShows("$(sparkle) 30% DEV");
+    assert.deepEqual(await requests(), []);
   },
 
   async "changing the poll interval is accepted"() {
