@@ -6,9 +6,17 @@ import type { Snapshot, State } from "./state";
 
 export const SETTINGS = "claudeLimitsMeter";
 
+/** From this usage, in either window, the status-bar text turns yellow. */
+export const WARN_PCT = 90;
+
 export interface StatusView {
   /** Status-bar text; may contain $(codicon) markers. */
   text: string;
+  /**
+   * The reading the text shows is at or over WARN_PCT in the 5-hour session or the 7-day week (whether or not the text
+   * shows the week): the item draws its text in the warning colour.
+   */
+  warn: boolean;
   /** Hover tooltip: a short summary, as Markdown with command links. */
   markdown: string;
 }
@@ -100,12 +108,16 @@ export function statusView(
     markdown += `\n\n${summaryLine(state.snapshot)}\n\n_Last checked ${clockTime(state.snapshot.checkedAt)}_`;
   }
   markdown += `\n\n[Refresh Now](command:${commands.refresh}) · [Open Credentials File](command:${commands.openCredentials}) · [Settings](command:${commands.openSettings})`;
-  return { text, markdown };
+  // Only a state whose text shows a reading: "!", "✗", "—" and "…" stand for no number, so they are not coloured.
+  const showsReading = state.status === "ok" || state.status === "rateLimited";
+  const warn = showsReading && s !== undefined && (s.fiveHour >= WARN_PCT || s.sevenDay >= WARN_PCT);
+  return { text, markdown, warn };
 }
 
 /** The view of a development build (F5 or a test host), marked so it is not mistaken for the installed extension. */
 export function devView(view: StatusView): StatusView {
   return {
+    ...view,
     text: `${view.text} DEV`,
     markdown: `$(beaker) **Development build**, not the installed extension\n\n${view.markdown}`,
   };
