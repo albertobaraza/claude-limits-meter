@@ -34,6 +34,11 @@ export interface State {
   retryAt?: number;
   /** rateLimited only: how many 429s in a row, which doubles the wait when the server gives no hint. */
   rateLimitStreak?: number;
+  /**
+   * The fingerprint (`loginId`) of the login this state was read for. Set only by a check that ran with `sharing` and got as
+   * far as reading the token, so that `adoptShared` can find this login's record without reading the credentials again.
+   */
+  login?: string;
 }
 
 export const INITIAL_STATE: State = { status: "loading" };
@@ -167,6 +172,38 @@ function fromOtherWindow(
 }
 
 /**
+ * What another window left in the shared file, as the next state of a window that is not checking right now: a 429 wait
+ * this one does not know of yet, or a reading newer than the one it shows. `undefined` when there is nothing new, and always
+ * for a window with no login to look the record up by (none, expired, or not read yet). This is how a window that is not
+ * focused, and so does not check, keeps showing what the others found out; it never asks the API.
+ */
+export function adoptShared(
+  state: State,
+  other: SharedRecord,
+  at: number,
+  log: (message: string) => void = () => {},
+): State | undefined {
+  const { login } = state;
+  if (!login || state.status === "loading" || state.status === "noCreds" || state.status === "expired") return undefined;
+
+  const limit = other.rateLimit;
+  if (limit) {
+    if (limit.retryAt <= at) return undefined; // over: this window's own timer asks again
+    const snapshot = newest(state.snapshot, other.snapshot);
+    const until = Math.min(limit.retryAt, at + MAX_SHARED_WAIT_MS);
+    if (state.status === "rateLimited" && state.retryAt === until && state.snapshot === snapshot) return undefined; // our own, or known
+    log(`Another window was rate limited, ${Math.ceil((until - at) / 1000)}s of its wait left`);
+    return { status: "rateLimited", login, snapshot, retryAt: until, rateLimitStreak: limit.streak };
+  }
+
+  const taken = other.snapshot?.checkedAt;
+  if (!other.snapshot || taken === undefined || taken > at) return undefined; // none, or from a clock gone back
+  if (state.snapshot && taken <= state.snapshot.checkedAt) return undefined; // not newer than what is on screen
+  log(`Another window took a newer reading ${Math.round((at - taken) / 1000)}s ago`);
+  return { status: "ok", login, snapshot: other.snapshot };
+}
+
+/**
  * One check. Never throws: a failure becomes the next state. With `sharing`, the other windows of this machine are asked
  * first (nothing is sent while one of them waits out a 429, or has just read the usage) and told after what this request
  * found, so that all of them together ask about as often as one.
@@ -181,6 +218,8 @@ export async function check(
   let snapshot = prev.snapshot;
   let streak = prev.status === "rateLimited" ? (prev.rateLimitStreak ?? 0) : 0;
   let login: string | undefined;
+  /** The state, tagged with the login it is for when the windows share (see `State.login`). */
+  const tagged = (state: State): State => (sharing && login ? { ...state, login } : state);
   try {
     const result = await client.getToken();
     // The reading belonged to a login that is gone (a logout, or an account that is about to be replaced): not shown any more.
@@ -193,7 +232,7 @@ export async function check(
       snapshot = newest(snapshot, other.snapshot);
       streak = other.rateLimit?.streak ?? 0; // the last request anyone made is the one that counts
       const reused = fromOtherWindow(other, snapshot, now(), sharing.reuseWithinMs, log);
-      if (reused) return reused;
+      if (reused) return tagged(reused);
     }
 
     const data = await client.fetchUsage(result.token);
@@ -205,7 +244,7 @@ export async function check(
       checkedAt: now(),
     };
     await sharing?.store.write(login, { snapshot: reading });
-    return { status: "ok", snapshot: reading };
+    return tagged({ status: "ok", snapshot: reading });
   } catch (e) {
     const message = describeError(e);
     log(message);
@@ -218,8 +257,8 @@ export async function check(
       const wait = e.retryAfterMs ?? Math.min(DEFAULT_BACKOFF_MS * 2 ** (streak - 1), MAX_BACKOFF_MS);
       const until = now() + wait;
       if (login) await sharing?.store.write(login, { snapshot, rateLimit: { retryAt: until, streak } });
-      return { status: "rateLimited", snapshot, retryAt: until, rateLimitStreak: streak };
+      return tagged({ status: "rateLimited", snapshot, retryAt: until, rateLimitStreak: streak });
     }
-    return { status: "error", error: message, snapshot };
+    return tagged({ status: "error", error: message, snapshot });
   }
 }

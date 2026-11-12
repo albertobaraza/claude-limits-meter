@@ -10,6 +10,7 @@
 // Sharing is an optimisation: whatever goes wrong here (no folder, no permission, a corrupt file) reads as "nothing known".
 
 import { createHash, randomBytes } from "node:crypto";
+import { watch, type FSWatcher } from "node:fs";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { Snapshot } from "./state";
@@ -94,4 +95,44 @@ export class FileSharedStore implements SharedStore {
   async clear(): Promise<void> {
     await fs.rm(this.file, { force: true }).catch(() => {});
   }
+}
+
+/** A burst of events (a rename shows up as two) is one change, and the file is read once it has settled. */
+const WATCH_DEBOUNCE_MS = 150;
+
+/**
+ * Calls `onChange` when the shared file may have changed: a write by any window, this one included. It watches the folder, not
+ * the file, because a write replaces the file whole and a watch on the old one would be left on a file nobody reads. Returns the
+ * function that stops it. Best effort like the rest: a folder that cannot be created or watched means no calls, and the window
+ * is no worse off than before (it sees what the others found out at its next check).
+ */
+export function watchSharedFile(file: string, onChange: () => void, debounceMs = WATCH_DEBOUNCE_MS): () => void {
+  const name = path.basename(file);
+  let watcher: FSWatcher | undefined;
+  let timer: NodeJS.Timeout | undefined;
+  let stopped = false;
+
+  const stop = () => {
+    stopped = true;
+    clearTimeout(timer);
+    watcher?.close();
+    watcher = undefined;
+  };
+
+  void (async () => {
+    try {
+      await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
+      if (stopped) return;
+      watcher = watch(path.dirname(file), { persistent: false }, (_event, changed) => {
+        if (changed && String(changed) !== name) return; // a temporary file of a write in progress
+        clearTimeout(timer);
+        timer = setTimeout(onChange, debounceMs);
+      });
+      watcher.on("error", stop); // e.g. the system's limit of watches: not worth a message
+    } catch {
+      // no folder, no permission: nothing to watch
+    }
+  })();
+
+  return stop;
 }
