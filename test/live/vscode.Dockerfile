@@ -10,6 +10,7 @@ COPY package.json package-lock.json tsconfig.json .vscodeignore ./
 RUN npm ci --ignore-scripts
 COPY src src
 COPY docs docs
+COPY images images
 COPY README.md CHANGELOG.md LICENSE ./
 RUN npm run package
 

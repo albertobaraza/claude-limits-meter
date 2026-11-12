@@ -6,6 +6,7 @@
 !.vscodeignore
 !src
 !docs
+!images
 !README.md
 !CHANGELOG.md
 !LICENSE
