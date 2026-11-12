@@ -127,7 +127,14 @@ jobs:
   publish:
     name: VS Code Marketplace
     needs: release
-    if: vars.PUBLISH_TO_MARKETPLACE == 'true' && github.ref == 'refs/heads/main'
+    # The implicit success() of an if: without a status function also looks at the ancestors of release: on a push the
+    # test job is skipped, so without !cancelled() this job would be skipped too and nothing would ever be published.
+    # needs.release.result keeps the rule that a release that did not succeed publishes nothing.
+    if: >-
+      !cancelled()
+      && needs.release.result == 'success'
+      && vars.PUBLISH_TO_MARKETPLACE == 'true'
+      && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

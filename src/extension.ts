@@ -31,7 +31,7 @@ const CMD_OPEN_SETTINGS = `${SETTINGS}.openSettings`;
  */
 export interface TestApi {
   /** What the status-bar item shows right now. */
-  statusBar(): { text: string; tooltip: string; backgroundColor?: string };
+  statusBar(): { text: string; tooltip: string; backgroundColor?: string; color?: string };
   /**
    * Waits for a check in flight, then runs a fresh one and returns once its result is on screen. It first forgets what
    * other windows left in the shared file, as if there were none, unless `keepShared` says to take it into account.
@@ -132,6 +132,7 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
     const tooltip = new vscode.MarkdownString(view.markdown, true);
     tooltip.isTrusted = { enabledCommands: [CMD_REFRESH, CMD_OPEN_CREDS, CMD_OPEN_SETTINGS] };
     item.text = view.text;
+    item.color = view.warn ? new vscode.ThemeColor("charts.yellow") : undefined;
     item.tooltip = tooltip;
   }
 
@@ -264,6 +265,7 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
       tooltip: typeof item.tooltip === "string" ? item.tooltip : (item.tooltip?.value ?? ""),
       // `id` is on every ThemeColor at runtime but missing from @types/vscode.
       backgroundColor: (item.backgroundColor as { id?: string } | undefined)?.id,
+      color: (item.color as { id?: string } | undefined)?.id,
     }),
     checkNow: async (options) => {
       await inFlight;

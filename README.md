@@ -15,13 +15,14 @@ Weekly (7d)   ██░░░░░░░░ 18%   ⏱ 4d 2h
 Last checked  14:32
 ```
 
-Hover the status bar item for a short summary of both windows. Click it for the details (a bar and the time until each window resets, and when the usage was last checked), plus **Refresh Now**, **Open Credentials File** and **Settings** (this extension's settings). It is deliberately minimal.
+Hover the status bar item for a short summary of both windows. Click it for the details (a bar and the time until each window resets, and when the usage was last checked), plus **Refresh Now**, **Open Credentials File** and **Settings** (this extension's settings). When either window reaches 90%, the status bar text turns yellow. It is deliberately minimal.
 
 ## What the item shows
 
 | Status bar | Meaning |
 | --- | --- |
 | `✦ 42%` | Your 5-hour session usage. With `claudeLimitsMeter.showWeekly` on: `✦ 5h 42% · 7d 18%`. |
+| `✦ 91%` in yellow | The 5-hour session or the 7-day week (shown or not) has reached 90%. |
 | `🕒 42%` | Claude asked for a pause. The last reading is shown, and the extension retries by itself. |
 | `✦ !` | The stored Claude token has expired. It renews the next time you use Claude Code. |
 | `✦ —` | No Claude Code login found on this machine. |
