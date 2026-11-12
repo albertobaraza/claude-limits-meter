@@ -4,6 +4,12 @@ All notable changes to this extension are documented here, following
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.6] - 2026-11-12
+
+### Fixed
+
+- While Claude is rate limiting the bar, the hover and the menu no longer say "next check in 0m" (or "in now") during the last minute of the wait. They now say that the extension will retry automatically.
+
 ## [0.5.5] - 2026-11-12
 
 ### Changed

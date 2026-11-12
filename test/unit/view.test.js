@@ -81,17 +81,28 @@ test("expired explains the way out, names the setting and still shows the last r
   assert.match(markdown, /Session \(5h\)/);
 });
 
-test("rateLimited shows a clock, the last reading, and when the next check can happen", () => {
+test("rateLimited shows a clock, the last reading, and that the extension retries by itself", () => {
   const state = { status: "rateLimited", snapshot: SNAPSHOT, retryAt: NOW + 2 * 60_000 };
   const { text, markdown } = view(state);
   assert.equal(text, "$(clock) 42%");
-  assert.match(markdown, /rate limiting requests\. The next check is in 2m; Refresh Now will not ask sooner/);
+  assert.match(markdown, /rate limiting requests\. The extension will retry automatically\./);
   assert.match(markdown, /Session \(5h\)/);
   assert.equal(view({ status: "rateLimited", retryAt: NOW + 1000 }).text, "$(clock) —", "no reading yet");
-  assert.match(view({ status: "rateLimited", retryAt: NOW - 1 }).markdown, /next check is in now/);
 });
 
-test("the menu says when the rate limit ends, between the usage lines and the actions", () => {
+test("a rate limit shows no countdown, which read \"0m\" for the last minute of a wait", () => {
+  for (const left of [3 * 60_000, 59_000, 30_000, 5_000, -1]) {
+    const state = { status: "rateLimited", snapshot: SNAPSHOT, retryAt: NOW + left };
+    const hover = view(state).markdown;
+    assert.doesNotMatch(hover, /next check|\b0m\b|in now/i, `hover, ${left} ms left`);
+    // A button's name is not in the sentence: "Refresh Now" appears once, as the link in the footer.
+    assert.equal(hover.match(/Refresh Now/g).length, 1, `hover, ${left} ms left`);
+    const notice = menuEntries(state, NOW).find((e) => e.label === "$(clock) Rate limited");
+    assert.equal(notice.description, "retrying automatically", `menu, ${left} ms left`);
+  }
+});
+
+test("the menu says Claude is rate limiting and that it retries by itself, between the usage lines and the actions", () => {
   const entries = menuEntries({ status: "rateLimited", snapshot: SNAPSHOT, retryAt: NOW + 3 * 60_000 }, NOW);
   assert.deepEqual(
     entries.map((e) => e.label),
@@ -106,7 +117,7 @@ test("the menu says when the rate limit ends, between the usage lines and the ac
       "$(gear) Settings",
     ],
   );
-  assert.equal(entries[2].description, "next check in 3m");
+  assert.equal(entries[2].description, "retrying automatically");
   assert.equal(entries[2].action, undefined, "informational");
 });
 
