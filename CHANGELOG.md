@@ -4,6 +4,13 @@ All notable changes to this extension are documented here, following
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-11-12
+
+### Changed
+
+- The yellow of the status bar text at 90% is brighter and easier to read, especially in dark themes. It is your theme's own yellow, so it still follows the theme you use.
+- Usage is now checked at most once a minute: `claudeLimitsMeter.pollIntervalSeconds` goes from 60 to 86400 instead of 15 to 86400, and a lower value counts as 60. The default is unchanged, so this only affects you if you had set it lower: Claude's usage endpoint is then asked less often, which should make the rate limit clock rarer.
+
 ## [0.6.0] - 2026-11-12
 
 ### Added
