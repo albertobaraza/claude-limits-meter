@@ -4,6 +4,12 @@ All notable changes to this extension are documented here, following
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-11-12
+
+### Added
+
+- The status bar text turns yellow when your 5-hour session or your 7-day week reaches 90%, so you notice a limit coming before you hit it. The week counts even when the bar shows only the session, and the text goes back to normal when the usage falls below 90%.
+
 ## [0.5.6] - 2026-11-12
 
 ### Fixed
