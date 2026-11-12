@@ -1,7 +1,8 @@
 # Contributing
 
-This document covers the day-to-day workflow. See the [README](README.md) for what the extension does and
-[CLAUDE.md](CLAUDE.md) for how the code is organised.
+This document covers the day-to-day workflow. See the [README](README.md) for what the extension does,
+[docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) for how it behaves in detail (checks, rate limits, several windows, token
+renewal) and [CLAUDE.md](CLAUDE.md) for how the code is organised.
 
 ## Setup
 
@@ -10,8 +11,24 @@ bash scripts/setup.sh
 ```
 
 It checks Node (22+), installs the dependencies and, if [pre-commit](https://pre-commit.com) is installed
-(`pipx install pre-commit`), the git hooks below. Press **F5** in VS Code to run the extension in a development window, or run `./scripts/run.sh` (Docker) to watch it in a
-VS Code in your browser against a mock Claude that you steer from a web page: no login and no network needed.
+(`pipx install pre-commit`), the git hooks below. Then see *Running it* to watch a change work.
+
+## Running it
+
+- **F5** in VS Code runs the extension in a development window (`.vscode/launch.json`). The status-bar item says `DEV`.
+- `./scripts/run.sh` (Docker) starts a VS Code in your browser on http://localhost:8788 with the packaged extension, and a mock Claude with a control page on
+  http://localhost:4010 where you change what the usage API answers (a reading, 429, 401, 500) and the login on the
+  machine, and watch the status bar react. Nothing real is involved: no Claude login and no call to Anthropic. Ctrl+C stops it.
+- To build the `.vsix` and install it in your own VS Code:
+
+  ```bash
+  npm ci --ignore-scripts
+  npm run package                 # produces claude-limits-meter-<version>.vsix
+  code --install-extension claude-limits-meter-*.vsix
+  ```
+
+The logic that does not need VS Code lives in `src/claude.ts`, `src/state.ts`, `src/shared.ts` and `src/view.ts` and is
+unit-tested; `src/extension.ts` is only the status-bar glue. The commands that test it are under *Tests* below.
 
 ## Branching
 
