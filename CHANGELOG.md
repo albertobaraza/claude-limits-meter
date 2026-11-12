@@ -4,6 +4,12 @@ All notable changes to this extension are documented here, following
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.5] - 2026-11-12
+
+### Changed
+
+- The Marketplace page is rewritten for people using the extension. It now lists what each status bar state means, the requirements (VS Code 1.125 or later, a Claude account login, a trusted workspace) and every command in a table, and the notes for people building the extension are no longer on it.
+
 ## [0.5.4] - 2026-11-12
 
 ### Fixed
