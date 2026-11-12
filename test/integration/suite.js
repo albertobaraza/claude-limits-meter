@@ -322,7 +322,7 @@ const checks = {
   },
 
   async "the text turns yellow from 90% in either window, and goes back when the usage falls"() {
-    const yellow = "charts.yellow";
+    const yellow = "terminal.ansiYellow";
     await answer(200, { body: reading(42, 18) });
     assert.equal((await checked()).color, undefined, "below 90% the text keeps the status bar's own colour");
 

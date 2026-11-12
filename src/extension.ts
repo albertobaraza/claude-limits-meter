@@ -132,7 +132,7 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
     const tooltip = new vscode.MarkdownString(view.markdown, true);
     tooltip.isTrusted = { enabledCommands: [CMD_REFRESH, CMD_OPEN_CREDS, CMD_OPEN_SETTINGS] };
     item.text = view.text;
-    item.color = view.warn ? new vscode.ThemeColor("charts.yellow") : undefined;
+    item.color = view.warn ? new vscode.ThemeColor("terminal.ansiYellow") : undefined;
     item.tooltip = tooltip;
   }
 
