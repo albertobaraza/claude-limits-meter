@@ -51,9 +51,11 @@ Five modules in `src/`, four of them with no `vscode` import so plain node tests
 - **`state.ts`**: the `State` (`loading | ok | noCreds | expired | rateLimited | error`, plus the last good reading) and
   `check()`, which turns one request into the next state and never throws. With a `Sharing` it first asks the store what
   the other windows found (a wait they are in, a reading they just took) and tells it what this request found.
+  `adoptShared()` is the same without a request: what a window shows after another one wrote the file.
 - **`shared.ts`**: what the windows of one machine tell each other: a `SharedStore` (a JSON file in the extension's
   storage folder, replaced whole by write-then-rename) holding the last reading and the end of a 429 wait, keyed by
-  `loginId` (a truncated SHA-256 of the access token). Best effort: a failure reads as "nothing known".
+  `loginId` (a truncated SHA-256 of the access token), and `watchSharedFile()`, which tells a window the file changed so
+  that even an unfocused one shows the newest reading. Best effort: a failure reads as "nothing known".
 - **`view.ts`**: a `State` as status-bar text, tooltip Markdown and click-menu entries. Pure strings.
 - **`extension.ts`**: the VS Code glue only: the status-bar item, the timer (60 s, skipped while the window is
   unfocused), the commands and the settings. Keep logic out of it; it is covered by the integration test, not the unit tests.

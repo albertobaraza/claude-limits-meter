@@ -5,10 +5,11 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { CREDS_PATH, ClaudeClient, SafeError, defaultOptions, findClientId, testOverrides } from "./claude";
-import { FileSharedStore } from "./shared";
+import { FileSharedStore, watchSharedFile } from "./shared";
 import {
   INITIAL_STATE,
   MIN_REFRESH_GAP_MS,
+  adoptShared,
   check,
   nextPollDelay,
   pollIntervalMs,
@@ -148,6 +149,22 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
     return inFlight;
   }
 
+  /**
+   * Another window wrote the shared file: show what it found out, with no request of our own. This is what keeps a window that
+   * is not focused (and so does not check) in step with the others. A check in flight reads the file itself and decides.
+   */
+  async function followOtherWindows() {
+    if (disposed || inFlight || !state.login) return;
+    const record = await shared.read(state.login);
+    if (!record || disposed || inFlight) return;
+    const before = state;
+    const next = adoptShared(before, record, Date.now(), logLine);
+    if (!next) return;
+    state = next;
+    render();
+    if (retryAt(next) !== retryAt(before)) schedule(); // a wait begins or ends: the timer has to know
+  }
+
   function schedule() {
     if (disposed) return;
     clearTimeout(timer);
@@ -201,6 +218,8 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
     await picked?.run?.();
   }
 
+  const stopWatching = watchSharedFile(sharedFile, () => void followOtherWindows());
+
   context.subscriptions.push(
     log,
     item,
@@ -208,6 +227,7 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
       dispose: () => {
         disposed = true;
         clearTimeout(timer);
+        stopWatching();
       },
     },
     vscode.commands.registerCommand(CMD_MENU, showMenu),

@@ -4,6 +4,12 @@ All notable changes to this extension are documented here, following
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.4] - 2026-11-12
+
+### Fixed
+
+- With several VS Code windows open, they no longer show different numbers. A window now picks up the newest reading any of them took, and a wait that Claude told one of them to take, as soon as it happens, even while it is not the focused window, instead of keeping an old number until its next check. Following the other windows sends no request.
+
 ## [0.5.3] - 2026-11-10
 
 ### Changed

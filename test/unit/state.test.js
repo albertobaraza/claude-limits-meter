@@ -13,6 +13,7 @@ const {
   pollIntervalMs,
   userSetting,
   describeError,
+  adoptShared,
   MAX_POLL_SECONDS,
   MAX_TIMER_MS,
 } = require("../../out/state.js");
@@ -303,7 +304,7 @@ test("another window's 429 is waited out: no request, the same wait and streak, 
   const logged = [];
   const next = await asked(c, OLD, store, { logged });
   assert.equal(c.requests, 0, "nothing is sent while another window is told to wait");
-  assert.deepEqual(next, { status: "rateLimited", snapshot: READING, retryAt: NOW + 90_000, rateLimitStreak: 2 });
+  assert.deepEqual(next, { status: "rateLimited", snapshot: READING, retryAt: NOW + 90_000, rateLimitStreak: 2, login: LOGIN });
   assert.match(logged.join("\n"), /another window was rate limited, 90s/);
   assert.equal(store.writes, 0);
 });
@@ -337,7 +338,7 @@ test("a reading another window took a moment ago is shown as it is, and nothing 
   const logged = [];
   const next = await asked(c, OLD, store, { logged });
   assert.equal(c.requests, 0);
-  assert.deepEqual(next, { status: "ok", snapshot: READING });
+  assert.deepEqual(next, { status: "ok", snapshot: READING, login: LOGIN });
   assert.match(logged.join("\n"), /another window took this reading 5s ago/);
 });
 
@@ -345,7 +346,7 @@ test("it clears a state that was not ok: a reading taken meanwhile by another wi
   const store = memoryStore({ [LOGIN]: { snapshot: READING } });
   for (const prev of [{ status: "error", error: "x", snapshot: OLD.snapshot }, { status: "rateLimited", retryAt: NOW - 1, rateLimitStreak: 3 }]) {
     const next = await asked(counting(), prev, store);
-    assert.deepEqual(next, { status: "ok", snapshot: READING }, prev.status);
+    assert.deepEqual(next, { status: "ok", snapshot: READING, login: LOGIN }, prev.status);
   }
 });
 
@@ -467,4 +468,83 @@ test("two windows on one machine ask about as often as one", async () => {
   assert.equal(api.requests, 3);
   assert.equal(a.state.rateLimitStreak, 2);
   assert.equal(a.state.retryAt - (b.state.retryAt + 1), DEFAULT_BACKOFF_MS * 2);
+});
+
+// ── following the other windows without checking (adoptShared) ───────────────
+
+test("a state read with sharing carries the login it is for, and one read without does not", async () => {
+  const store = memoryStore();
+  const ok = await asked(counting(), INITIAL_STATE, store, { reuseWithinMs: 0 });
+  assert.equal(ok.login, LOGIN);
+  const error = await asked(counting({ usageError: new Error("offline") }), OLD, store, { reuseWithinMs: 0 });
+  assert.equal(error.login, LOGIN);
+  const limited = await asked(counting({ usageError: new HttpError(429, "Usage fetch failed", undefined) }), OLD, store, { reuseWithinMs: 0 });
+  assert.equal(limited.login, LOGIN);
+  assert.equal("login" in (await check(client(), INITIAL_STATE)), false, "no sharing, no fingerprint");
+  assert.equal((await asked(counting({ token: { kind: "expired" } }), OLD, store)).login, undefined, "an expired login has none to look up");
+});
+
+const HERE = { status: "ok", login: LOGIN, snapshot: { fiveHour: 10, sevenDay: 20, checkedAt: NOW - 600_000 } };
+
+test("a newer reading another window took is adopted, with its own time, and nothing is asked of the API", () => {
+  const logged = [];
+  const next = adoptShared(HERE, { snapshot: READING }, NOW, (m) => logged.push(m));
+  assert.deepEqual(next, { status: "ok", login: LOGIN, snapshot: READING });
+  assert.match(logged.join("\n"), /another window took a newer reading 5s ago/i);
+});
+
+test("a reading that is not newer than the one on screen, or none, changes nothing: this window's own write comes back as an event too", () => {
+  assert.equal(adoptShared({ ...HERE, snapshot: READING }, { snapshot: READING }, NOW), undefined, "the same reading");
+  assert.equal(adoptShared({ ...HERE, snapshot: READING }, { snapshot: { ...READING, checkedAt: READING.checkedAt - 1 } }, NOW), undefined, "an older one");
+  assert.equal(adoptShared(HERE, {}, NOW), undefined, "an empty record");
+});
+
+test("a reading dated in the future (a clock set back) is not adopted", () => {
+  assert.equal(adoptShared(HERE, { snapshot: { ...READING, checkedAt: NOW + 1_000 } }, NOW), undefined);
+});
+
+test("a window that has no reading yet adopts any", () => {
+  const next = adoptShared({ status: "error", error: "x", login: LOGIN }, { snapshot: READING }, NOW);
+  assert.deepEqual(next, { status: "ok", login: LOGIN, snapshot: READING });
+});
+
+test("a reading after a 429 ends this window's wait too, and an error gives way to it", () => {
+  for (const state of [
+    { status: "rateLimited", login: LOGIN, snapshot: HERE.snapshot, retryAt: NOW + 90_000, rateLimitStreak: 2 },
+    { status: "error", error: "x", login: LOGIN, snapshot: HERE.snapshot },
+  ]) {
+    assert.deepEqual(adoptShared(state, { snapshot: READING }, NOW), { status: "ok", login: LOGIN, snapshot: READING }, state.status);
+  }
+});
+
+test("another window's 429 is adopted as it stands: the same wait and streak, the newest reading kept", () => {
+  const logged = [];
+  const next = adoptShared(HERE, { snapshot: READING, rateLimit: { retryAt: NOW + 90_000, streak: 2 } }, NOW, (m) => logged.push(m));
+  assert.deepEqual(next, { status: "rateLimited", login: LOGIN, snapshot: READING, retryAt: NOW + 90_000, rateLimitStreak: 2 });
+  assert.match(logged.join("\n"), /another window was rate limited, 90s/i);
+
+  const mine = { fiveHour: 70, sevenDay: 80, checkedAt: NOW - 1_000 };
+  assert.equal(adoptShared({ ...HERE, snapshot: mine }, { snapshot: READING, rateLimit: { retryAt: NOW + 5_000, streak: 1 } }, NOW).snapshot, mine);
+});
+
+test("a wait this window already has is not adopted again, but a different one is", () => {
+  const known = { status: "rateLimited", login: LOGIN, snapshot: READING, retryAt: NOW + 90_000, rateLimitStreak: 2 };
+  const record = { snapshot: READING, rateLimit: { retryAt: NOW + 90_000, streak: 2 } };
+  assert.equal(adoptShared(known, record, NOW), undefined, "this window's own 429, seen from the file");
+  const later = adoptShared(known, { ...record, rateLimit: { retryAt: NOW + 240_000, streak: 3 } }, NOW);
+  assert.deepEqual([later.retryAt, later.rateLimitStreak], [NOW + 240_000, 3], "the last request anyone made is the one that counts");
+});
+
+test("a wait that is over, or that no 429 could have asked for, is handled as when a check reads it", () => {
+  assert.equal(adoptShared(HERE, { snapshot: READING, rateLimit: { retryAt: NOW - 1, streak: 2 } }, NOW), undefined, "over: the timer asks again");
+  const cut = adoptShared(HERE, { rateLimit: { retryAt: NOW + 10 * 24 * 3_600_000, streak: 1 } }, NOW);
+  assert.equal(cut.retryAt, NOW + 3_600_000);
+});
+
+test("a window with no login to look up, or no login at all, follows nobody", () => {
+  const record = { snapshot: READING, rateLimit: { retryAt: NOW + 90_000, streak: 1 } };
+  assert.equal(adoptShared({ status: "ok", snapshot: HERE.snapshot }, record, NOW), undefined, "a state from before sharing");
+  for (const status of ["loading", "noCreds", "expired"]) {
+    assert.equal(adoptShared({ status, login: LOGIN }, record, NOW), undefined, status);
+  }
 });

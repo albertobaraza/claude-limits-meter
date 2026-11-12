@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { FileSharedStore, loginId } = require("../../out/shared.js");
+const { FileSharedStore, loginId, watchSharedFile } = require("../../out/shared.js");
 
 const SNAPSHOT = {
   fiveHour: 36.4,
@@ -128,4 +128,85 @@ test("loginId tells logins apart, is stable, and is not the token", () => {
   assert.notEqual(loginId("token-a"), loginId("token-b"));
   assert.match(loginId("token-a"), /^[0-9a-f]{32}$/);
   assert.ok(!loginId("token-a").includes("token"));
+});
+
+// ── watching the file ────────────────────────────────────────────────────────
+
+/** Watches `file` and counts the calls. */
+const calls = (file, { debounceMs = 20 } = {}) => {
+  let count = 0;
+  const stop = watchSharedFile(file, () => count++, debounceMs);
+  return { stop, count: () => count };
+};
+/** Waits for `ok()`, and fails with `what` if it is still false after `limit` ms. */
+const until = async (what, ok, limit = 5_000) => {
+  const end = Date.now() + limit;
+  while (!ok() && Date.now() < end) await new Promise((r) => setTimeout(r, 20));
+  assert.ok(ok(), `${what}: not seen within ${limit} ms`);
+};
+const settle = (ms = 300) => new Promise((r) => setTimeout(r, ms));
+
+test("a write to the file is noticed, in a folder that did not exist when the watch began", async () => {
+  const { store, file } = makeStore();
+  const watching = calls(file);
+  try {
+    await until("the folder", () => fs.existsSync(path.dirname(file)));
+    await store.write("login-a", { snapshot: SNAPSHOT });
+    await until("a call", () => watching.count() >= 1);
+  } finally {
+    watching.stop();
+  }
+});
+
+test("a burst of writes is one call, and the file read then holds the last of them", async () => {
+  const { store, file } = makeStore();
+  const watching = calls(file, { debounceMs: 200 });
+  try {
+    await until("the folder", () => fs.existsSync(path.dirname(file)));
+    await settle(100); // the watch itself is set up just after the folder
+    for (let i = 0; i < 5; i++) await store.write("login-a", { snapshot: { ...SNAPSHOT, fiveHour: i } });
+    await until("a call", () => watching.count() >= 1);
+    await settle();
+    assert.equal(watching.count(), 1);
+    assert.equal((await store.read("login-a")).snapshot.fiveHour, 4);
+  } finally {
+    watching.stop();
+  }
+});
+
+test("another file in the folder is not the shared file", async () => {
+  const { file } = makeStore();
+  const watching = calls(file);
+  try {
+    await until("the folder", () => fs.existsSync(path.dirname(file)));
+    await settle(100);
+    fs.writeFileSync(path.join(path.dirname(file), "something-else.json"), "{}");
+    await settle();
+    assert.equal(watching.count(), 0);
+  } finally {
+    watching.stop();
+  }
+});
+
+test("a watch that is stopped calls nothing, even when it is stopped before it began", async () => {
+  const { store, file } = makeStore();
+  const early = calls(file);
+  early.stop(); // before the folder exists
+  const late = calls(file);
+  await until("the folder", () => fs.existsSync(path.dirname(file)));
+  await settle(100);
+  late.stop();
+  await store.write("login-a", { snapshot: SNAPSHOT });
+  await settle();
+  assert.deepEqual([early.count(), late.count()], [0, 0]);
+});
+
+test("a folder that cannot be made means no watch and no error", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "claude-shared-test-"));
+  const blocker = path.join(dir, "a-file");
+  fs.writeFileSync(blocker, "");
+  const watching = calls(path.join(blocker, "storage", "shared.json")); // a folder under a file
+  await settle();
+  watching.stop();
+  assert.equal(watching.count(), 0);
 });
