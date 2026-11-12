@@ -49,7 +49,8 @@ export const MIN_REFRESH_GAP_MS = 10_000;
 export const DEFAULT_BACKOFF_MS = 2 * 60_000;
 export const MAX_BACKOFF_MS = 30 * 60_000;
 
-export const MIN_POLL_SECONDS = 15;
+/** One check a minute at most: Claude's usage endpoint answers 429 to anything faster for long. */
+export const MIN_POLL_SECONDS = 60;
 export const DEFAULT_POLL_SECONDS = 60;
 /** A day: far above any useful interval, and far below the longest delay a timer can hold. */
 export const MAX_POLL_SECONDS = 24 * 60 * 60;
@@ -57,8 +58,8 @@ export const MAX_POLL_SECONDS = 24 * 60 * 60;
 export const MAX_TIMER_MS = 2 ** 31 - 1;
 
 /**
- * The delay between checks from the `pollIntervalSeconds` setting, between 15 s and a day. Anything but a finite number
- * (a string in a hand-edited settings file) is the default. Both ends matter: `Math.max(15, "abc")` is NaN and a delay above
+ * The delay between checks from the `pollIntervalSeconds` setting, between 60 s and a day. Anything but a finite number
+ * (a string in a hand-edited settings file) is the default. Both ends matter: `Math.max(60, "abc")` is NaN and a delay above
  * `MAX_TIMER_MS` is replaced by 1 ms, and either one makes the timer fire at once, over and over, which also turns the wait
  * after a 429 into nothing, so the extension would ask the API as fast as it answers.
  */

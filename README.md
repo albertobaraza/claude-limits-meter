@@ -57,7 +57,7 @@ If you would rather renew from here, turn on **`claudeLimitsMeter.refreshExpired
 
 | Setting | Default | |
 | --- | --- | --- |
-| `claudeLimitsMeter.pollIntervalSeconds` | `60` | Seconds between checks (15 to 86400; a value outside that is clamped, and anything that is not a number means 60). Checks are skipped while the window is unfocused. |
+| `claudeLimitsMeter.pollIntervalSeconds` | `60` | Seconds between checks (60 to 86400; a value outside that is clamped, and anything that is not a number means 60). Checks are skipped while the window is unfocused. |
 | `claudeLimitsMeter.showWeekly` | `false` | Show the 7-day weekly usage next to the 5-hour session in the status bar (`5h 42% · 7d 18%`). Off shows the 5-hour session alone. |
 | `claudeLimitsMeter.refreshExpiredToken` | `false` | See above. Read from your User settings only: a workspace's `.vscode/settings.json` cannot switch it on. |
 | `claudeLimitsMeter.clientId` | `""` | OAuth client id for the option above; empty means auto-detect. User settings only, like the option above. |

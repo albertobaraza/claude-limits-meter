@@ -2,7 +2,7 @@
   "name": "claude-limits-meter",
   "displayName": "Claude Limits Meter",
   "description": "Unofficial. Your Claude Code 5-hour session and 7-day weekly usage in the status bar. Works on Linux, macOS, Windows, WSL and remote hosts.",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "publisher": "albertobaraza",
   "icon": "images/icon.png",
   "license": "MIT",
@@ -72,9 +72,9 @@
         "claudeLimitsMeter.pollIntervalSeconds": {
           "type": "number",
           "default": 60,
-          "minimum": 15,
+          "minimum": 60,
           "maximum": 86400,
-          "description": "Seconds between usage checks, from 15 to 86400 (a day). Checks are skipped while the VS Code window is unfocused."
+          "description": "Seconds between usage checks, from 60 to 86400 (a day). Checks are skipped while the VS Code window is unfocused."
         },
         "claudeLimitsMeter.showWeekly": {
           "type": "boolean",
