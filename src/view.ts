@@ -2,7 +2,7 @@
 // Free of any `vscode` import, so it is unit-tested with plain node.
 
 import { bar, clockTime, pctText, timeLeft } from "./claude";
-import { retryAt, type Snapshot, type State } from "./state";
+import type { Snapshot, State } from "./state";
 
 export const SETTINGS = "claudeLimitsMeter";
 
@@ -50,11 +50,6 @@ export function escapeMarkdown(s: string): string {
   return s.replace(/\s+/g, " ").replace(/[\\`*_{}[\]()#+\-.!|<>~=&$]/g, "\\$&");
 }
 
-/** "2m" until the time the rate limit lets the next check run, or "now" once it has passed. */
-function retryIn(state: State, now: number): string {
-  return timeLeft(new Date(retryAt(state)).toISOString(), now);
-}
-
 export function statusView(
   state: State,
   commands: Commands,
@@ -84,9 +79,8 @@ export function statusView(
       break;
     case "rateLimited":
       text = `$(clock) ${s ? usageText(s.fiveHour, s.sevenDay, showWeekly) : "—"}`;
-      body =
-        `$(clock) Claude is rate limiting requests. The next check is in ${retryIn(state, now)}; ` +
-        "Refresh Now will not ask sooner.";
+      // No countdown: it rounds to whole minutes, so the last minute of a wait read "0m". The footer's Refresh Now link is the button.
+      body = "$(clock) Claude is rate limiting requests. The extension will retry automatically.";
       break;
     case "error":
       text = "$(sparkle) ✗";
@@ -118,7 +112,7 @@ export function devView(view: StatusView): StatusView {
 }
 
 /** The line the menu adds under the usage when the state needs explaining (the hover has the same in Markdown). */
-function menuNotice(state: State, now: number): MenuEntry | undefined {
+function menuNotice(state: State): MenuEntry | undefined {
   switch (state.status) {
     case "noCreds":
       return {
@@ -133,7 +127,7 @@ function menuNotice(state: State, now: number): MenuEntry | undefined {
           `${SETTINGS}.refreshExpiredToken (not available for the macOS Keychain).`,
       };
     case "rateLimited":
-      return { label: "$(clock) Rate limited", description: `next check in ${retryIn(state, now)}` };
+      return { label: "$(clock) Rate limited", description: "retrying automatically" };
     case "error":
       return { label: "$(error) Error", detail: state.error ?? "Unknown error" };
     default:
@@ -157,7 +151,7 @@ export function menuEntries(state: State, now = Date.now()): MenuEntry[] {
   } else {
     entries.push({ label: "$(pulse) Usage", description: state.status === "noCreds" ? "no credentials" : "—" });
   }
-  const notice = menuNotice(state, now);
+  const notice = menuNotice(state);
   if (notice) entries.push(notice);
   if (s) entries.push({ label: "$(history) Last checked", description: clockTime(s.checkedAt) });
   entries.push(
