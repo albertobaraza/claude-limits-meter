@@ -10,12 +10,11 @@ mkdir -p "$HOME/project" "$HOME/.local/share/code-server/User"
 sudo cp /shared-certs/ca.pem /usr/local/share/ca-certificates/mock-claude-ca.crt
 sudo update-ca-certificates > /dev/null
 
-# The extension checks every 15 s (its smallest interval) while this tab is focused, so a change on the mock shows
-# within seconds. The client id is any UUID: it only matters once refreshExpiredToken is switched on, and the mock
-# accepts it, so renewal can be tried with one setting.
+# The extension checks every 60 s (its default, and its smallest interval) while this tab is focused; a change on the mock
+# shows then, or at once with Refresh Now in the item's menu. The client id is any UUID: it only matters once
+# refreshExpiredToken is switched on, and the mock accepts it, so renewal can be tried with one setting.
 cat > "$HOME/.local/share/code-server/User/settings.json" <<'JSON'
 {
-  "claudeLimitsMeter.pollIntervalSeconds": 15,
   "claudeLimitsMeter.clientId": "00000000-0000-0000-0000-000000000000",
   "workbench.startupEditor": "none",
   "workbench.colorTheme": "Default Dark Modern",

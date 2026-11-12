@@ -196,13 +196,14 @@ test("recovering replaces an error with a fresh reading", async () => {
 
 // ── settings ─────────────────────────────────────────────────────────────────
 
-test("the poll interval is at least 15 s, and the default when the setting is not a number", () => {
+test("the poll interval is at least 60 s, and the default when the setting is not a number", () => {
   assert.equal(pollIntervalMs(60), 60_000);
-  assert.equal(pollIntervalMs(30), 30_000);
-  assert.equal(pollIntervalMs(15), 15_000);
-  assert.equal(pollIntervalMs(1), 15_000, "below the minimum");
-  assert.equal(pollIntervalMs(0), 15_000);
-  assert.equal(pollIntervalMs(-5), 15_000);
+  assert.equal(pollIntervalMs(120), 120_000);
+  assert.equal(pollIntervalMs(30), 60_000, "below the minimum");
+  assert.equal(pollIntervalMs(15), 60_000, "what the minimum used to be");
+  assert.equal(pollIntervalMs(1), 60_000);
+  assert.equal(pollIntervalMs(0), 60_000);
+  assert.equal(pollIntervalMs(-5), 60_000);
   for (const odd of ["abc", "30", "", null, undefined, NaN, Infinity, -Infinity, {}, [], true]) {
     assert.equal(pollIntervalMs(odd), 60_000, `${String(odd)} falls back to the default`);
   }
@@ -243,7 +244,7 @@ test("the poll interval has a ceiling too, so no setting can overflow the timer"
   assert.equal(pollIntervalMs(Number.MAX_VALUE), 86_400_000);
   for (const s of [15, 60, 3600, 86_400, 3e6, 1e308, -1, 0]) {
     const ms = pollIntervalMs(s);
-    assert.ok(Number.isFinite(ms) && ms >= 15_000 && ms <= MAX_TIMER_MS, `${s} -> ${ms}`);
+    assert.ok(Number.isFinite(ms) && ms >= 60_000 && ms <= MAX_TIMER_MS, `${s} -> ${ms}`);
   }
 });
 

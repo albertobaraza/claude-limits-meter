@@ -72,9 +72,9 @@
         "claudeLimitsMeter.pollIntervalSeconds": {
           "type": "number",
           "default": 60,
-          "minimum": 15,
+          "minimum": 60,
           "maximum": 86400,
-          "description": "Seconds between usage checks, from 15 to 86400 (a day). Checks are skipped while the VS Code window is unfocused."
+          "description": "Seconds between usage checks, from 60 to 86400 (a day). Checks are skipped while the VS Code window is unfocused."
         },
         "claudeLimitsMeter.showWeekly": {
           "type": "boolean",

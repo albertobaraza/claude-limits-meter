@@ -62,7 +62,7 @@ case "$MODE" in
   VS Code            http://localhost:${VSCODE_PORT}     the extension is the status-bar item, bottom right
   Mock Claude        http://localhost:${MOCK_PORT}     change what the API answers, and the login, here
 
-  Hover the status-bar item for the summary, click it for the details. It checks every 15 s while the tab is focused.
+  Hover the status-bar item for the summary, click it for the details. It checks every 60 s while the tab is focused; Refresh Now in its menu asks sooner.
   What the extension asks is below. Ctrl+C stops everything.
 
 BANNER
