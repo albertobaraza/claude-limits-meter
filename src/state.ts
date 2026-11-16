@@ -106,6 +106,14 @@ export function refreshAllowedAt(state: State, lastCheckAt: number): number {
   return Math.max(lastCheckAt + MIN_REFRESH_GAP_MS, retryAt(state));
 }
 
+/**
+ * The earliest time (epoch ms) a request from the command line (see export.ts) may reach the API. A program can ask far
+ * more often than a person clicks, so it is held to the timer's own pace: a minute after the last check, and not during a wait.
+ */
+export function requestAllowedAt(state: State, lastCheckAt: number): number {
+  return Math.max(lastCheckAt + MIN_POLL_SECONDS * 1000, retryAt(state));
+}
+
 /** An errno or TLS code such as ECONNREFUSED, ENOTFOUND, UND_ERR_CONNECT_TIMEOUT or CERT_HAS_EXPIRED. */
 const ERROR_CODE = /^[A-Z][A-Z0-9_]{2,40}$/;
 
