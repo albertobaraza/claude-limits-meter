@@ -3,10 +3,12 @@
 // build on each other: the extension is one live object, walked through the states Claude's API can put it in.
 
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const vscode = require("vscode");
 const { TEST_ENV } = require("../../out/claude.js");
+const { UsageExport, stateDir } = require("../../out/export.js");
 const { FileSharedStore, loginId } = require("../../out/shared.js");
 const { readLogin, removeLogin, writeLogin } = require("./common");
 const { FAKE_TOKENS, usageBody } = require("./fake-api");
@@ -59,6 +61,16 @@ function assertIn(text, expected, what) {
 
 const home = () => os.homedir();
 
+/** Waits for `ok()` to hold: for what the extension does by itself, after a setting changes or a file appears. */
+async function eventually(what, ok, within = 10_000) {
+  const end = Date.now() + within;
+  while (!(await ok()) && Date.now() < end) await new Promise((r) => setTimeout(r, 50));
+  assert.ok(await ok(), `${what}: not within ${within} ms`);
+}
+
+/** The folder a program reads (src/export.ts), as a program would use it. It is inside the throwaway home (see homeEnv). */
+const commandLine = () => new UsageExport(stateDir());
+
 const checks = {
   "the extension is installed under the id the manifest promises"() {
     assert.ok(vscode.extensions.getExtension(EXTENSION_ID), `${EXTENSION_ID} not found`);
@@ -86,6 +98,7 @@ const checks = {
     assert.equal(cfg.get("showWeekly"), false, "the bar shows the 5-hour session alone unless asked");
     assert.equal(cfg.get("refreshExpiredToken"), false, "refreshing a login must stay opt-in");
     assert.equal(cfg.get("clientId"), "");
+    assert.equal(cfg.get("commandLine"), false, "nothing is written for other programs unless asked");
   },
 
   // ── no login yet: the throwaway HOME starts empty ──
@@ -372,6 +385,93 @@ const checks = {
     await otherWindow.write(login, { snapshot: { fiveHour: 30, sevenDay: 15, checkedAt: Date.now() } });
     await itemShows("$(sparkle) 30% DEV");
     assert.deepEqual(await requests(), []);
+  },
+
+  // ── the command line: a folder other programs read, and ask through, once the user switched it on ──
+
+  async "the command line is off by default: no folder for other programs exists"() {
+    const { dir } = commandLine();
+    const inside = path.relative(home(), dir);
+    assert.ok(inside && !inside.startsWith("..") && !path.isAbsolute(inside), `${dir} must be inside the throwaway home`);
+    assert.equal(fs.existsSync(dir), false);
+  },
+
+  async "a workspace cannot switch the command line on: its .vscode/settings.json is ignored for it"() {
+    const cfg = vscode.workspace.getConfiguration("claudeLimitsMeter");
+    await cfg.update("commandLine", true, vscode.ConfigurationTarget.Workspace);
+    try {
+      assert.equal(vscode.workspace.getConfiguration("claudeLimitsMeter").get("commandLine"), true, "the workspace does set it");
+      await checked();
+      await new Promise((r) => setTimeout(r, 500));
+      assert.equal(fs.existsSync(commandLine().dir), false, "and nothing came of it");
+    } finally {
+      await cfg.update("commandLine", undefined, vscode.ConfigurationTarget.Workspace);
+    }
+  },
+
+  async "switched on in the User settings, the reading on the bar is in the usage file, beside a launcher for this build's command"() {
+    await answer(200, { body: reading(30, 15) });
+    await checked();
+    const files = commandLine();
+    await vscode.workspace.getConfiguration("claudeLimitsMeter").update("commandLine", true, vscode.ConfigurationTarget.Global);
+    await eventually("the usage file", async () => (await files.read()) !== undefined);
+    const usage = await files.read();
+    assert.equal(usage.fiveHour.percent, 30);
+    assert.equal(usage.sevenDay.percent, 15);
+    assert.deepEqual(Object.keys(JSON.parse(fs.readFileSync(files.usageFile, "utf8"))).sort(), ["checkedAt", "fiveHour", "sevenDay", "v"]);
+
+    const cli = path.resolve(__dirname, "..", "..", "out", "cli.js");
+    assertIn(fs.readFileSync(files.launcherFile, "utf8"), `require(${JSON.stringify(cli)}).main();`, "the launcher");
+    assert.ok(fs.existsSync(cli), "and the command it runs is in the build");
+  },
+
+  async "every check writes its reading to the usage file"() {
+    await answer(200, { body: reading(41, 16) });
+    await checked();
+    assert.equal((await commandLine().read()).fiveHour.percent, 41);
+  },
+
+  async "a program's request is answered with one request to Claude, though nobody touched the window"() {
+    const files = commandLine();
+    await answer(200, { body: reading(55, 22) });
+    fs.rmSync(api.sharedFile, { force: true }); // no other window has a reading to reuse
+    api.ageLastCheck(61_000); // a request is answered a minute after the last check at the earliest
+    await forgetRequests();
+    assert.equal(await files.request(), true);
+    await eventually("the new reading", async () => (await files.read())?.fiveHour.percent === 55);
+    assert.equal((await requests()).length, 1);
+    assert.equal(fs.existsSync(files.requestFile), false, "the request was taken");
+    await itemShows("$(sparkle) 55% DEV");
+  },
+
+  async "a second request within the minute is taken and not answered: a program cannot make the extension ask more often"() {
+    const files = commandLine();
+    await answer(200, { body: reading(99, 99) });
+    await forgetRequests();
+    assert.equal(await files.request(), true);
+    await eventually("the request to be taken", () => !fs.existsSync(files.requestFile));
+    await new Promise((r) => setTimeout(r, 500));
+    assert.deepEqual(await requests(), [], "nothing was sent");
+    assert.equal((await files.read()).fiveHour.percent, 55, "and the usage file keeps the reading it had");
+  },
+
+  async "with no login the usage file goes, and comes back with the next reading"() {
+    const files = commandLine();
+    removeLogin(home());
+    await checked();
+    assert.equal(await files.read(), undefined, "a reading for a login that is gone is not left for a program to act on");
+    writeLogin(home());
+    await answer(200, { body: reading(12, 6) });
+    await checked();
+    assert.equal((await files.read()).fiveHour.percent, 12);
+  },
+
+  async "switched off again, the folder is removed"() {
+    const { dir } = commandLine();
+    await vscode.workspace.getConfiguration("claudeLimitsMeter").update("commandLine", undefined, vscode.ConfigurationTarget.Global);
+    await eventually("the folder to go", () => !fs.existsSync(dir));
+    await checked();
+    assert.equal(fs.existsSync(dir), false, "and a check does not bring it back");
   },
 
   async "changing the poll interval is accepted"() {
