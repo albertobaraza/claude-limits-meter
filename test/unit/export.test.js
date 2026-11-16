@@ -224,7 +224,10 @@ test("a window watching the folder is told of a request, and not of the usage fi
 
 test("the launcher runs the command it was written for, from any folder", async () => {
   const { files, root } = makeExport();
-  const cli = path.join(root, 'ext "quoted" \\ folder', "cli.js");
+  // A path with everything the launcher's source must escape. Windows allows no quote in a file name, and its paths
+  // have the backslashes already.
+  const awkward = process.platform === "win32" ? "ext 'quoted' folder" : 'ext "quoted" \\ folder';
+  const cli = path.join(root, awkward, "cli.js");
   fs.mkdirSync(path.dirname(cli), { recursive: true });
   fs.writeFileSync(cli, 'exports.main = () => { console.log("ran " + process.argv.slice(2).join(" ")); process.exitCode = 1; };');
   assert.equal(await files.installLauncher(cli), true);
