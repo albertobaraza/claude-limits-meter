@@ -40,6 +40,30 @@ The file holds the last reading, the time a `429` says to wait until, and a one-
 SHA-256 of the access token, so a reading is never shown for another account). It holds **no token**, it is readable by you
 only (mode 600), and if it cannot be read or written the extension works as if there were no other windows.
 
+## From the command line
+
+With `claudeLimitsMeter.commandLine` on, the extension also serves other programs on the machine: a script, or a coding
+agent that wants to know whether there is room before it starts. It is **off by default**, and only your User settings
+can switch it on: a workspace's `.vscode/settings.json` is ignored for it.
+
+- The folder is where each system keeps a program's state (the [README](../README.md#from-scripts-and-coding-agents) lists
+  the paths), not VS Code's storage folder, whose path depends on which VS Code it is. It is made readable by you only,
+  and the extension writes nothing into a folder that is a link to somewhere else or that belongs to another account.
+- `usage.json` holds the reading the status bar has: `checkedAt`, and `percent` and `resetsAt` for `fiveHour` and
+  `sevenDay`. Every check writes it. It has no token and, unlike the file the windows share, no fingerprint of the login.
+  When there is no login at all the file is removed, so a program never acts on a reading taken for a login that is gone.
+- `claude-limits.cjs` is a launcher the extension writes each time it starts. It runs the command inside the installed
+  extension, whose own path changes with every version.
+- A program asks for a fresh reading by leaving a file named `refresh-request` in the folder, which is what
+  `claude-limits --fresh` does. Every window watches the folder, one of them takes the request (removing the file is what
+  decides which), and that one checks, **focused or not**. The answer is the usage file changing.
+- A request is answered a minute after the last check at the earliest, and never during a wait after a `429`. Too early,
+  it is taken and not answered: the program sees no new reading and exits with 2. So a program cannot make the extension
+  ask Claude more often than the status bar's own checks do.
+- The command reads the folder and nothing else: no login, no network. If VS Code is not running nobody answers, and the
+  command takes its request back after `--wait` seconds so that it is not answered hours later.
+- Switching the setting off removes the three files, and the folder if nothing else is in it.
+
 ## When the token expires
 
 Claude Code's access token lasts a few hours and Claude Code renews it whenever it is used, so normally there is nothing to

@@ -27,8 +27,8 @@ It checks Node (22+), installs the dependencies and, if [pre-commit](https://pre
   code --install-extension claude-limits-meter-*.vsix
   ```
 
-The logic that does not need VS Code lives in `src/claude.ts`, `src/state.ts`, `src/shared.ts` and `src/view.ts` and is
-unit-tested; `src/extension.ts` is only the status-bar glue. The commands that test it are under *Tests* below.
+The logic that does not need VS Code lives in `src/claude.ts`, `src/state.ts`, `src/shared.ts`, `src/view.ts`,
+`src/export.ts` and `src/cli.ts` (the `claude-limits` command) and is unit-tested; `src/extension.ts` is only the status-bar glue. The commands that test it are under *Tests* below.
 
 ## Branching
 
@@ -87,10 +87,10 @@ The integration test, the coverage gate and the package check run in CI, not on 
 
 | Command | What it covers |
 | --- | --- |
-| `npm test` | Unit tests of `claude.ts`, `state.ts`, `shared.ts`, `view.ts` and the scripts, against a mock server and a stubbed `security` command |
+| `npm test` | Unit tests of `claude.ts`, `state.ts`, `shared.ts`, `view.ts`, `export.ts`, `cli.ts` and the scripts, against a mock server and a stubbed `security` command |
 | `npm run test:coverage` | The same, failing under 90% lines / 85% branches / 80% functions |
 | `npm run test:package` | The `.vsix` holds what it should and nothing else |
-| `xvfb-run -a npm run test:integration` | The extension loaded in a real VS Code with a fake login and a fake Claude API: activates, registers its commands, has its settings, and shows the right status-bar item for no login, a reading, 429, 401, 500, a renewed login, and another window's reading or 429 |
+| `xvfb-run -a npm run test:integration` | The extension loaded in a real VS Code with a fake login and a fake Claude API: activates, registers its commands, has its settings, and shows the right status-bar item for no login, a reading, 429, 401, 500, a renewed login, and another window's reading or 429; and, with the command line switched on, writes the usage file and answers a program's request |
 | `xvfb-run -a -s "-screen 0 1280x800x24" npm run test:ui` | The packaged `.vsix` installed in a real VS Code and driven through its window (Playwright): the status-bar item, its hover and its menu, with screenshots in `.vscode-test/screenshots` |
 | `npm run test:integration:docker` | Both of the above in a clean Linux container (`test/ui/Dockerfile`, Node 22, Xvfb). A local convenience; CI uses the native runners |
 
@@ -190,7 +190,7 @@ Other extensions and anything else running as the user are not a boundary: they 
 ([`SECURITY.md`](SECURITY.md), "Out of scope"). [`CLAUDE.md`](CLAUDE.md) ("Rules that are not negotiable") and
 `SECURITY.md` ("In scope") say what we promise about tokens, and decide what we fix.
 
-**Run `/security-audit` on any branch that touches** `src/claude.ts`, `src/extension.ts`, `package.json`'s settings,
+**Run `/security-audit` on any branch that touches** `src/claude.ts`, `src/extension.ts`, `src/export.ts`, `src/cli.ts`, `package.json`'s settings,
 `.github/workflows/` or `scripts/`, and point it at the checklists that fit the change. They are in the skill's folder:
 
 | Change | Checklist |
@@ -198,6 +198,7 @@ Other extensions and anything else running as the user are not a boundary: they 
 | The login: reading the credentials file or the Keychain, writing a renewed one back | [`DESKTOP-MOBILE-AND-LOCAL-IPC.md`](.claude/skills/security-audit/DESKTOP-MOBILE-AND-LOCAL-IPC.md) (local-file and credential-store classes) |
 | The requests to Anthropic: the token refresh, the usage call, redirects, what an error or response may carry | [`WEB-PROTOCOL-AND-AUTH.md`](.claude/skills/security-audit/WEB-PROTOCOL-AND-AUTH.md) (token and key exposure; the identity classes mostly do not apply, we are a client) |
 | Workflows, `release.yaml`, trusted publishing, Dependabot, the `.vsix` contents (`.vscodeignore`) | [`SUPPLY-CHAIN-AND-RELEASE.md`](.claude/skills/security-audit/SUPPLY-CHAIN-AND-RELEASE.md) (CI, release authorization, plugin trust) |
+| The command line: the folder other programs read and leave requests in, the launcher, `src/export.ts` and `src/cli.ts` | [`DESKTOP-MOBILE-AND-LOCAL-IPC.md`](.claude/skills/security-audit/DESKTOP-MOBILE-AND-LOCAL-IPC.md) (local-file and local-IPC classes) |
 | Text from outside shown in the tooltip or menu | [`ATTACK-CLASSES.md`](.claude/skills/security-audit/ATTACK-CLASSES.md) (injection); the browser-only classes in `CLIENT-SIDE.md` do not apply |
 
 Memory safety, the RPC, cloud, AI and data-isolation checklists do not apply here.
