@@ -5,15 +5,18 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { CREDS_PATH, ClaudeClient, SafeError, defaultOptions, findClientId, testOverrides } from "./claude";
+import { UsageExport, stateDir } from "./export";
 import { FileSharedStore, watchSharedFile } from "./shared";
 import {
   INITIAL_STATE,
+  MIN_POLL_SECONDS,
   MIN_REFRESH_GAP_MS,
   adoptShared,
   check,
   nextPollDelay,
   pollIntervalMs,
   refreshAllowedAt,
+  requestAllowedAt,
   retryAt,
   userSetting,
   type State,
@@ -39,6 +42,11 @@ export interface TestApi {
   checkNow(options?: { keepShared?: boolean }): Promise<void>;
   /** The file the windows share (see shared.ts), so a test can play another window. */
   sharedFile: string;
+  /**
+   * Makes the last check look `ms` older than it is. A request from the command line is answered a minute after the last
+   * check at the earliest, and a test cannot wait a minute.
+   */
+  ageLastCheck(ms: number): void;
 }
 
 export function activate(context: vscode.ExtensionContext): TestApi | undefined {
@@ -109,6 +117,13 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
 
   let renewalOn = userOnly<boolean>("refreshExpiredToken", false) === true;
 
+  // What other programs on this machine may read and ask for (export.ts), when the user switched it on. It makes the extension
+  // write outside its own storage folder and take requests from whatever runs as the user, so, like renewal, it is the user's
+  // alone to switch on: a workspace's value is ignored.
+  const exported = new UsageExport(stateDir());
+  let commandLineOn = false;
+  let stopWatchingRequests: (() => void) | undefined;
+
   const client = new ClaudeClient({
     ...defaultOptions({
       userAgent: `claude-limits-meter/${context.extension.packageJSON.version}`,
@@ -137,13 +152,17 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
   }
 
   // ── polling ──
-  /** `manual`: the user asked, so a reading another window took a few seconds ago is not reused, only a fresher one. */
-  function poll(manual = false): Promise<void> {
+  /**
+   * `reuseWithinMs`: a reading another window took less than this long ago is shown instead of asking again. The interval
+   * for the timer; less when somebody asked (the user, or a program through the command line) and wants a fresher one.
+   */
+  function poll(reuseWithinMs = intervalMs()): Promise<void> {
     inFlight ??= (async () => {
       lastPollAt = Date.now();
-      const sharing = { store: shared, reuseWithinMs: manual ? MIN_REFRESH_GAP_MS : intervalMs() };
-      state = await check(client, state, logLine, Date.now, sharing);
-      if (!disposed) render();
+      state = await check(client, state, logLine, Date.now, { store: shared, reuseWithinMs });
+      if (disposed) return;
+      render();
+      if (commandLineOn) await exported.publish(state);
     })().finally(() => {
       inFlight = undefined;
     });
@@ -187,8 +206,46 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
       return;
     }
     item.text = "$(sync~spin) …";
-    await poll(true);
+    await poll(MIN_REFRESH_GAP_MS);
     schedule();
+  }
+
+  // ── the command line ──
+  /**
+   * A program left a request for a fresh reading (see cli.ts). Every window sees it, the one that takes it answers, and
+   * focus does not matter: the program asking is usually at work while nobody looks at VS Code. What comes of the check
+   * is written to the usage file by `poll`, which is where the program is looking.
+   */
+  async function answerRequest() {
+    if (disposed || !commandLineOn || !(await exported.claimRequest())) return;
+    const waitMs = requestAllowedAt(state, lastPollAt) - Date.now();
+    if (waitMs > 0 && !inFlight) {
+      logLine(`Command-line request not answered: the next request may be sent in ${Math.ceil(waitMs / 1000)}s`);
+      return;
+    }
+    logLine("Command-line request: checking");
+    await poll(MIN_POLL_SECONDS * 1000);
+    schedule();
+  }
+
+  /** Follows the `commandLine` setting: the folder, its launcher and the watch for requests exist only while it is on. */
+  async function applyCommandLine() {
+    const on = userOnly<boolean>("commandLine", false) === true;
+    if (on === commandLineOn || disposed) return;
+    commandLineOn = on;
+    if (!on) {
+      stopWatchingRequests?.();
+      stopWatchingRequests = undefined;
+      await exported.remove();
+      logLine(`Command line switched off: ${exported.dir} removed`);
+      return;
+    }
+    const installed = await exported.installLauncher(path.join(context.extensionPath, "out", "cli.js"));
+    logLine(installed ? `Command line switched on: ${exported.launcherFile}` : `Could not write ${exported.launcherFile}`);
+    stopWatchingRequests = watchSharedFile(exported.requestFile, () => void answerRequest());
+    await inFlight; // a check that began before the setting was on has not written its reading
+    if (commandLineOn && !disposed) await exported.publish(state);
+    void answerRequest(); // one left while no window was there to see it
   }
 
   // ── commands ──
@@ -229,6 +286,7 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
         disposed = true;
         clearTimeout(timer);
         stopWatching();
+        stopWatchingRequests?.();
       },
     },
     vscode.commands.registerCommand(CMD_MENU, showMenu),
@@ -243,6 +301,7 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration(`${SETTINGS}.pollIntervalSeconds`)) schedule();
       if (e.affectsConfiguration(`${SETTINGS}.showWeekly`)) render();
+      if (e.affectsConfiguration(`${SETTINGS}.commandLine`)) void applyCommandLine();
       if (e.affectsConfiguration(`${SETTINGS}.refreshExpiredToken`)) {
         // Only the user's own value counts (see userOnly): a repository rewriting its settings file is not a reason to check.
         const on = userOnly<boolean>("refreshExpiredToken", false) === true;
@@ -257,6 +316,7 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
   render();
   item.show();
   void poll().then(schedule);
+  void applyCommandLine();
 
   if (!dev) return undefined;
   return {
@@ -273,6 +333,9 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
       await poll();
     },
     sharedFile,
+    ageLastCheck: (ms) => {
+      lastPollAt -= ms;
+    },
   };
 }
 

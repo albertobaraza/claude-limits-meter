@@ -29,9 +29,18 @@ function makeScratch() {
   return { ...dirs, dispose: () => fs.rmSync(root, { recursive: true, force: true }) };
 }
 
-/** The environment that makes this machine's home the throwaway one (the extension finds its login from it). */
+/**
+ * The environment that makes this machine's home the throwaway one (the extension finds its login from it), and with it the
+ * folder the command line reads (`stateDir` in src/export.ts), which Linux and Windows each take from a variable of its own.
+ */
 function homeEnv(scratch) {
-  return { HOME: scratch.home, USERPROFILE: scratch.home, [ENV.scratch]: scratch.root };
+  return {
+    HOME: scratch.home,
+    USERPROFILE: scratch.home,
+    XDG_STATE_HOME: path.join(scratch.home, ".local", "state"),
+    LOCALAPPDATA: path.join(scratch.home, "AppData", "Local"),
+    [ENV.scratch]: scratch.root,
+  };
 }
 
 /** The command-line flags every VS Code started by a test gets. */

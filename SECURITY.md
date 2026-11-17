@@ -20,6 +20,9 @@ fixed version is available.
 - Anything that leaks, logs or sends a token somewhere other than the hosts above.
 - Writing to a credentials file or the Keychain when `refreshExpiredToken` is off, or corrupting the file when it is on.
 - Markdown or command injection through the status-bar tooltip.
+- With `claudeLimitsMeter.commandLine` on: a token or a fingerprint of one in the folder other programs read, the
+  `claude-limits` command reading a login or using the network, or a way to make the extension ask Claude more often
+  than once a minute through it.
 - A packaged `.vsix` that contains more than the extension (secrets, sources, tooling).
 
 ## Out of scope

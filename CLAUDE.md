@@ -42,7 +42,7 @@ from here without stripping them first**, or it installs into the developer's ow
 
 ## Architecture
 
-Five modules in `src/`, four of them with no `vscode` import so plain node tests them:
+Seven modules in `src/`, six of them with no `vscode` import so plain node tests them:
 
 - **`claude.ts`**: where the login is read from (macOS Keychain, then `~/.claude/.credentials.json`; the file only on
   Linux, Windows, WSL and remote hosts), the opt-in token renewal, the usage request, and the formatting helpers
@@ -57,8 +57,16 @@ Five modules in `src/`, four of them with no `vscode` import so plain node tests
   `loginId` (a truncated SHA-256 of the access token), and `watchSharedFile()`, which tells a window the file changed so
   that even an unfocused one shows the newest reading. Best effort: a failure reads as "nothing known".
 - **`view.ts`**: a `State` as status-bar text, tooltip Markdown and click-menu entries. Pure strings.
+- **`export.ts`**: what other programs on the machine may read and ask for, when the user switched on `commandLine`
+  (off by default, user-only): `stateDir()` (the platform's state folder, not VS Code's storage) and `UsageExport`, the
+  three files in it: `usage.json` (the reading alone, written after every check, removed with no login), `refresh-request`
+  (left by a program, taken by exactly one window) and `claude-limits.cjs` (a launcher for `cli.ts`, rewritten at start).
+- **`cli.ts`**: the `claude-limits` command, shipped as `out/cli.js`: prints the reading and answers with its exit status
+  (0 room, 1 a limit is reached, 2 cannot tell). `--fresh` leaves a request and waits for the usage file to change. `run()`
+  takes the folder, the clock and the streams as arguments, which is how the tests drive it.
 - **`extension.ts`**: the VS Code glue only: the status-bar item, the timer (60 s, skipped while the window is
-  unfocused), the commands and the settings. Keep logic out of it; it is covered by the integration test, not the unit tests.
+  unfocused), the commands, the settings and answering a program's request (the one check an unfocused window makes).
+  Keep logic out of it; it is covered by the integration test, not the unit tests.
 
 `extensionKind` is `workspace`: the extension must run where Claude Code's login is (WSL, Remote-SSH, a container), not on
 the UI side.
@@ -73,6 +81,10 @@ the UI side.
 - **The login is re-read on every check**, so a token Claude Code renewed meanwhile is picked up with no action here.
 - **The shared file holds no token**, only readings, a wait and `loginId` (a one-way fingerprint). A record is used only
   for the login it was written for, and a bad file is read as empty. Keep it that way: it is not a place for credentials.
+- **The command line never touches a login.** `export.ts` and `cli.ts` do not import `claude.ts` (a unit test reads their
+  `require`s), the usage file has no `loginId`, and the only thing a program can make the extension do is one ordinary
+  check, a minute after the last one at the earliest (`requestAllowedAt`) and never during a 429 wait. `commandLine` is
+  read from User settings only, like renewal: it makes the extension write outside its storage folder.
 - **No runtime dependencies.** `devDependencies` only. A new runtime dependency needs a reason in the PR.
 - **The only hosts contacted** are `api.anthropic.com` (usage) and, when renewal is on, `console.anthropic.com`. No
   telemetry. `README.md` ("Privacy and security") says so; change one, change the other.
@@ -90,15 +102,16 @@ the UI side.
 `test/unit/` mirrors `src/` and `scripts/` (run against the compiled `out/`). `test/integration/` is the real-VS-Code test:
 `run.js` starts VS Code with a throwaway HOME and a fake Claude API (`fake-api.js`, steered over HTTP by the suite), and
 `suite.js` runs inside the extension host with no framework, walking the one live extension through the states the API
-can put it in (no login, 200, 429, 401, 500, renewal, another window's reading or 429) and reading the status-bar item through
-`TestApi` (whose `checkNow()` forgets the shared file unless told not to: the suite plays another window by writing it). It writes fake
-logins only inside the throwaway HOME (`assertThrowaway` in `common.js`). `test/ui/` installs the packaged `.vsix` (a
+can put it in (no login, 200, 429, 401, 500, renewal, another window's reading or 429, a program's request) and reading the status-bar item through
+`TestApi` (whose `checkNow()` forgets the shared file unless told not to: the suite plays another window by writing it, and a program by
+leaving a request). It writes fake logins only inside the throwaway HOME (`assertThrowaway` in `common.js`), and `homeEnv` puts the
+command line's folder inside it on every system. `test/ui/` installs the packaged `.vsix` (a
 Production build: no DEV marker, no `TestApi`, so only states that need no network: no login and an expired one) and
 drives the real window with `playwright-core`, a dev dependency. `test/ui/Dockerfile` is the clean room for both.
 `test/live/` is not a test but the same pieces made to look at: `scripts/run.sh` starts `compose.yml` (code-server with the
 packaged `.vsix`, and `mock/`, the fake API over TLS under the real hostnames as compose network aliases, trusted through
 `NODE_EXTRA_CA_CERTS`, plus a control page). The extension there is the unmodified Production build, so it needs none of the
-test seam. It shares nothing with the host but two loopback ports: never mount `~/.claude` into it. A change to `claude.ts`, `state.ts` or `view.ts` comes with
+test seam. It shares nothing with the host but two loopback ports: never mount `~/.claude` into it. A change to `claude.ts`, `state.ts`, `view.ts`, `export.ts` or `cli.ts` comes with
 a test; the coverage gate in CI fails below the thresholds. There is no linter: `tsc` in strict mode is the static check.
 
 ## Conventions

@@ -4,6 +4,13 @@ All notable changes to this extension are documented here, following
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-11-16
+
+### Added
+
+- Scripts and coding agents can now ask whether there is room left in your limits before they start a long job. Switch on `claudeLimitsMeter.commandLine` in your User settings (it is off by default, and a workspace cannot switch it on) and the extension keeps its last reading in a small folder in your user state folder, with a `claude-limits` command beside it. `claude-limits --fresh 120 --max-5h 90 --max-7d 95` exits with 0 when there is room, 1 when a limit is reached and 2 when it cannot tell. The README lists the folder on each system and every option.
+- With `--fresh`, the command asks the extension for a new reading when the last one is too old, and gets one even while VS Code is not focused. A program can make the extension ask Claude at most once a minute, and the command itself never reads your Claude login or uses the network.
+
 ## [0.6.1] - 2026-11-12
 
 ### Changed

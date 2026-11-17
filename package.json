@@ -2,7 +2,7 @@
   "name": "claude-limits-meter",
   "displayName": "Claude Limits Meter",
   "description": "Unofficial. Your Claude Code 5-hour session and 7-day weekly usage in the status bar. Works on Linux, macOS, Windows, WSL and remote hosts.",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "publisher": "albertobaraza",
   "icon": "images/icon.png",
   "license": "MIT",
@@ -90,6 +90,11 @@
           "type": "string",
           "default": "",
           "markdownDescription": "OAuth client id used when `#claudeLimitsMeter.refreshExpiredToken#` is on. Leave empty to detect it from the installed Claude Code extension. Only read from your User settings: a value in a workspace's `.vscode/settings.json` is ignored."
+        },
+        "claudeLimitsMeter.commandLine": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Let scripts and coding agents on this computer read your usage. Keeps the last reading in a small file in your user state folder, with a `claude-limits` command beside it that says whether there is room and can ask this extension for a fresh reading (at most one a minute, even while VS Code is not focused). The command never reads your login. Switching this off removes the folder. Only read from your User settings: a value in a workspace's `.vscode/settings.json` is ignored."
         }
       }
     }

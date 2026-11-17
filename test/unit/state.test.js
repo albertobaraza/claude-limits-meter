@@ -7,6 +7,7 @@ const {
   retryAt,
   nextPollDelay,
   refreshAllowedAt,
+  requestAllowedAt,
   MIN_REFRESH_GAP_MS,
   DEFAULT_BACKOFF_MS,
   MAX_BACKOFF_MS,
@@ -146,6 +147,15 @@ test("a manual refresh reaches the API only after the minimum gap and after any 
   const state = { status: "rateLimited", retryAt: NOW + 5 * 60_000 };
   assert.equal(refreshAllowedAt(state, NOW), NOW + 5 * 60_000, "the rate limit outlasts the gap");
   assert.equal(refreshAllowedAt({ ...state, retryAt: NOW + 1_000 }, NOW), NOW + MIN_REFRESH_GAP_MS, "the gap outlasts a short limit");
+});
+
+test("a request from the command line reaches the API a minute after the last check, and after any rate limit", () => {
+  assert.equal(requestAllowedAt(PREV, NOW), NOW + 60_000, "a program is held to the timer's pace, not to a click's");
+  assert.ok(requestAllowedAt(PREV, NOW) > refreshAllowedAt(PREV, NOW));
+  assert.ok(requestAllowedAt(PREV, 0) < Date.now(), "nothing has been checked yet: no wait");
+  const state = { status: "rateLimited", retryAt: NOW + 5 * 60_000 };
+  assert.equal(requestAllowedAt(state, NOW), NOW + 5 * 60_000, "the rate limit outlasts the minute");
+  assert.equal(requestAllowedAt({ ...state, retryAt: NOW + 1_000 }, NOW), NOW + 60_000, "the minute outlasts a short limit");
 });
 
 test("a failed token renewal is an error too", async () => {
