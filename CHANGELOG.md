@@ -4,6 +4,16 @@ All notable changes to this extension are documented here, following
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-11-18
+
+### Added
+
+- A new **Open Usage in Browser** entry in the menu that opens when you click the status bar item, also available in the Command Palette as `Claude Limits Meter: Open Usage in Browser`. It opens Claude's own usage page (claude.ai/settings/usage) in your browser, where you can see your usage in full. It works from WSL, Remote-SSH and containers too, and nothing from your login or your readings is sent with it.
+
+### Changed
+
+- The hover over the status bar item now links only to Refresh Now and Settings. Open Credentials File is no longer in the hover; it is still in the click menu and the Command Palette.
+
 ## [0.7.0] - 2026-11-16
 
 ### Added
