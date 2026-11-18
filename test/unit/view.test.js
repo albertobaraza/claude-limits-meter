@@ -71,12 +71,53 @@ test("a text with no number in it is never flagged, however high the old reading
   assert.equal(view({ status: "rateLimited", retryAt: NOW + 1000 }).warn, false, "no reading yet");
 });
 
-test("the hover is a short summary of both windows and when they were last checked, with no bars", () => {
+test("the hover lists both windows one above the other, each with its usage and the time until it resets, with no header, and when they were checked", () => {
   const { markdown } = view({ status: "ok", snapshot: SNAPSHOT });
-  assert.match(markdown, /Session \(5h\) \*\*42%\*\* · Weekly \(7d\) \*\*18%\*\*/);
+  const table = markdown.split("\n").filter((l) => l.startsWith("|"));
+  assert.deepEqual(table, [
+    "| | | | | |",
+    "| :-- | :-: | --: | :-: | :-- |",
+    "| Session | · | **42%** | · | 2h 13m |",
+    "| Weekly | · | **18%** | · | 4d 2h |",
+  ]);
+  assert.doesNotMatch(markdown, /\(5h\)|\(7d\)|Used|Resets/, "no header and no window lengths: they are in the click menu");
   assert.match(markdown, /_Last checked 14:32_/);
-  assert.doesNotMatch(markdown, /[█░⏱]/, "bars and reset times are in the click menu");
+  assert.doesNotMatch(markdown, /[█░⏱]/, "the bars are in the click menu");
   assert.doesNotMatch(markdown, /```/);
+});
+
+test("the hover's table is a real one: the same number of columns in every row, the numbers aligned to the right", () => {
+  const rows = view({ status: "ok", snapshot: SNAPSHOT })
+    .markdown.split("\n")
+    .filter((l) => l.startsWith("|"));
+  assert.equal(new Set(rows.map((r) => r.split("|").length)).size, 1, "one column count for the header, the divider and the rows");
+  const aligns = rows[1].split("|").slice(1, -1).map((a) => a.trim());
+  assert.deepEqual(aligns, [":--", ":-:", "--:", ":-:", ":--"], "the percentage is right-aligned, so 5% and 100% line up, and the dots stay put");
+});
+
+test("the hover counts down to each reset from the time it is drawn, so drawing it again later shows less", () => {
+  const state = { status: "ok", snapshot: SNAPSHOT };
+  const at = (now) => statusView(state, COMMANDS, now).markdown;
+  assert.match(at(NOW), /\| Session \| · \| \*\*42%\*\* \| · \| 2h 13m \|/);
+  assert.match(at(NOW + 60_000), /\| Session \| · \| \*\*42%\*\* \| · \| 2h 12m \|/);
+  assert.match(at(NOW + 60 * 60_000), /\| Weekly \| · \| \*\*18%\*\* \| · \| 4d 1h \|/);
+  assert.notEqual(at(NOW), at(NOW + 60_000), "a redraw a minute later is not the same text");
+  assert.equal(at(NOW), at(NOW), "and a redraw at once is, which lets the item leave an open hover alone");
+});
+
+test("a window whose reset has passed or is unknown says so in the hover, and the usage still shows", () => {
+  const hover = (snapshot, now = NOW) => statusView({ status: "ok", snapshot }, COMMANDS, now).markdown;
+  assert.match(hover(SNAPSHOT, Date.parse("2026-01-01T02:13:00Z")), /\| Session \| · \| \*\*42%\*\* \| · \| now \|/);
+  assert.match(hover({ ...SNAPSHOT, fiveHourReset: null }), /\| Session \| · \| \*\*42%\*\* \| · \| \? \|/);
+  assert.match(hover({ ...SNAPSHOT, sevenDayReset: undefined }), /\| Weekly \| · \| \*\*18%\*\* \| · \| \? \|/);
+  assert.match(hover({ ...SNAPSHOT, sevenDayReset: "not a date" }), /\| Weekly \| · \| \*\*18%\*\* \| · \| \? \|/);
+});
+
+test("a reset time from the API cannot add anything to the hover but a duration, a question mark or now", () => {
+  const evil = "[x](command:workbench.action.reloadWindow) | **injected**";
+  const { markdown } = view({ status: "ok", snapshot: { ...SNAPSHOT, fiveHourReset: evil, sevenDayReset: evil } });
+  assert.doesNotMatch(markdown, /injected|reloadWindow/);
+  assert.equal(markdown.split("\n").filter((l) => l.startsWith("|")).length, 4);
 });
 
 test("a development build marks the text and the tooltip, and keeps everything else", () => {
@@ -100,14 +141,14 @@ test("noCreds says how to sign in, and shows no old reading", () => {
   const { text, markdown } = view({ status: "noCreds", snapshot: SNAPSHOT });
   assert.equal(text, "$(sparkle) —");
   assert.match(markdown, /No Claude Code login found/);
-  assert.doesNotMatch(markdown, /Session \(5h\)/);
+  assert.doesNotMatch(markdown, /\| Session \|/);
 });
 
 test("expired explains the way out, names the setting and still shows the last reading", () => {
   const { text, markdown } = view({ status: "expired", snapshot: SNAPSHOT });
   assert.equal(text, "$(sparkle) !");
   assert.match(markdown, new RegExp(`${SETTINGS}\\.refreshExpiredToken`));
-  assert.match(markdown, /Session \(5h\)/);
+  assert.match(markdown, /\| Session \|/);
 });
 
 test("rateLimited shows a clock, the last reading, and that the extension retries by itself", () => {
@@ -115,7 +156,7 @@ test("rateLimited shows a clock, the last reading, and that the extension retrie
   const { text, markdown } = view(state);
   assert.equal(text, "$(clock) 42%");
   assert.match(markdown, /rate limiting requests\. The extension will retry automatically\./);
-  assert.match(markdown, /Session \(5h\)/);
+  assert.match(markdown, /\| Session \|/);
   assert.equal(view({ status: "rateLimited", retryAt: NOW + 1000 }).text, "$(clock) —", "no reading yet");
 });
 
@@ -155,8 +196,8 @@ test("error shows the message and the last reading if there is one", () => {
   const withReading = view({ status: "error", error: "Usage fetch failed: HTTP 500", snapshot: SNAPSHOT });
   assert.equal(withReading.text, "$(sparkle) ✗");
   assert.match(withReading.markdown, /\$\(error\) Usage fetch failed: HTTP 500/);
-  assert.match(withReading.markdown, /Session \(5h\)/);
-  assert.doesNotMatch(view({ status: "error", error: "x" }).markdown, /Session \(5h\)/);
+  assert.match(withReading.markdown, /\| Session \|/);
+  assert.doesNotMatch(view({ status: "error", error: "x" }).markdown, /\| Session \|/);
 });
 
 test("an error message cannot inject Markdown or a command link into the tooltip", () => {
