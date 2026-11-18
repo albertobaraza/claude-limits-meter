@@ -1,10 +1,10 @@
 // What each state looks like (src/view.ts): status-bar text, tooltip Markdown and the click menu.
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { statusView, menuEntries, devView, escapeMarkdown, SETTINGS, WARN_PCT } = require("../../out/view.js");
+const { statusView, menuEntries, devView, escapeMarkdown, SETTINGS, WARN_PCT, USAGE_PAGE_URL } = require("../../out/view.js");
 
 const NOW = Date.parse("2026-01-01T00:00:00Z");
-const COMMANDS = { refresh: "ext.refresh", openCredentials: "ext.openCreds", openSettings: "ext.openSettings" };
+const COMMANDS = { refresh: "ext.refresh", openSettings: "ext.openSettings" };
 const SNAPSHOT = {
   fiveHour: 42.9,
   fiveHourReset: "2026-01-01T02:13:00+00:00",
@@ -14,12 +14,13 @@ const SNAPSHOT = {
 };
 const view = (state) => statusView(state, COMMANDS, NOW);
 
-test("every state links to the refresh and credentials commands", () => {
+test("every state links to the refresh and settings commands, and only those: the other actions are in the click menu", () => {
   for (const status of ["loading", "ok", "noCreds", "expired", "rateLimited", "error"]) {
     const { markdown } = view({ status, snapshot: SNAPSHOT, error: "x" });
     assert.match(markdown, /\[Refresh Now\]\(command:ext\.refresh\)/, status);
-    assert.match(markdown, /\[Open Credentials File\]\(command:ext\.openCreds\)/, status);
     assert.match(markdown, /\[Settings\]\(command:ext\.openSettings\)/, status);
+    assert.deepEqual(markdown.match(/\]\(command:[^)]*\)/g), ["](command:ext.refresh)", "](command:ext.openSettings)"], status);
+    assert.doesNotMatch(markdown, /Open Usage in Browser|Open Credentials File/, status);
   }
 });
 
@@ -141,6 +142,7 @@ test("the menu says Claude is rate limiting and that it retries by itself, betwe
       "$(history) Last checked",
       "",
       "$(refresh) Refresh Now",
+      "$(link-external) Open Usage in Browser",
       "$(key) Open Credentials File",
       "$(gear) Settings",
     ],
@@ -182,6 +184,7 @@ test("the menu lists both windows with bars and reset times, when they were chec
       "$(history) Last checked",
       "",
       "$(refresh) Refresh Now",
+      "$(link-external) Open Usage in Browser",
       "$(key) Open Credentials File",
       "$(gear) Settings",
     ],
@@ -190,7 +193,7 @@ test("the menu lists both windows with bars and reset times, when they were chec
   assert.equal(entries[1].description, "██░░░░░░░░ 18%   ⏱ 4d 2h");
   assert.equal(entries[2].description, "14:32");
   assert.equal(entries[3].separator, true);
-  assert.deepEqual(entries.filter((e) => e.action).map((e) => e.action), ["refresh", "openCredentials", "openSettings"]);
+  assert.deepEqual(entries.filter((e) => e.action).map((e) => e.action), ["refresh", "openUsage", "openCredentials", "openSettings"]);
   assert.equal(entries[0].action, undefined, "usage lines are informational");
   assert.equal(entries[2].action, undefined, "so is the last-checked line");
 });
@@ -218,5 +221,22 @@ test("the menu explains a state that needs it, as plain text, between the usage 
   assert.equal(error.detail, "Usage fetch failed: HTTP 500", "the message as it is, not escaped for Markdown");
   assert.equal(menuEntries({ status: "error" }, NOW)[1].detail, "Unknown error");
 
-  assert.equal(labels({ status: "ok", snapshot: SNAPSHOT }).length, 7, "an ok state needs no explanation");
+  assert.equal(labels({ status: "ok", snapshot: SNAPSHOT }).length, 8, "an ok state needs no explanation");
+});
+
+test("the usage page is Claude's own settings page, over https, and the click menu offers to open it in every state", () => {
+  const url = new URL(USAGE_PAGE_URL);
+  assert.equal(url.protocol, "https:");
+  assert.equal(url.hostname, "claude.ai");
+  assert.equal(url.pathname, "/settings/usage");
+  assert.equal(url.search + url.hash, "", "nothing is added to the address: no token, no reading");
+
+  for (const status of ["loading", "ok", "noCreds", "expired", "rateLimited", "error"]) {
+    const state = { status, snapshot: SNAPSHOT, retryAt: NOW + 1000, error: "x" };
+    const open = menuEntries(state, NOW).filter((e) => e.action === "openUsage");
+    assert.equal(open.length, 1, `${status}: one entry in the click menu`);
+    assert.equal(open[0].label, "$(link-external) Open Usage in Browser", status);
+  }
+  // With no login there is still a usage page to look at, so the entry is not hidden with the readings.
+  assert.ok(menuEntries({ status: "noCreds" }, NOW).some((e) => e.action === "openUsage"));
 });
