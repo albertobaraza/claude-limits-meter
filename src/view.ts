@@ -9,6 +9,12 @@ export const SETTINGS = "claudeLimitsMeter";
 /** From this usage, in either window, the status-bar text turns yellow. */
 export const WARN_PCT = 90;
 
+/**
+ * The page where Claude shows the same usage in detail. The menu's "Open Usage in Browser" opens it in the user's own browser:
+ * this extension never requests it, and it is a fixed address, not one a setting or a reading can change.
+ */
+export const USAGE_PAGE_URL = "https://claude.ai/settings/usage";
+
 export interface StatusView {
   /** Status-bar text; may contain $(codicon) markers. */
   text: string;
@@ -32,13 +38,13 @@ export interface MenuEntry {
   /** A second, longer line under the label. */
   detail?: string;
   /** Picking the entry runs this; entries without one are informational. */
-  action?: "refresh" | "openCredentials" | "openSettings";
+  action?: "refresh" | "openUsage" | "openCredentials" | "openSettings";
   separator?: true;
 }
 
+/** The commands the hover links to. The click menu has more entries, but a hover is only for the quick ones. */
 export interface Commands {
   refresh: string;
-  openCredentials: string;
   openSettings: string;
 }
 
@@ -107,7 +113,7 @@ export function statusView(
   ) {
     markdown += `\n\n${summaryLine(state.snapshot)}\n\n_Last checked ${clockTime(state.snapshot.checkedAt)}_`;
   }
-  markdown += `\n\n[Refresh Now](command:${commands.refresh}) · [Open Credentials File](command:${commands.openCredentials}) · [Settings](command:${commands.openSettings})`;
+  markdown += `\n\n[Refresh Now](command:${commands.refresh}) · [Settings](command:${commands.openSettings})`;
   // Only a state whose text shows a reading: "!", "✗", "—" and "…" stand for no number, so they are not coloured.
   const showsReading = state.status === "ok" || state.status === "rateLimited";
   const warn = showsReading && s !== undefined && (s.fiveHour >= WARN_PCT || s.sevenDay >= WARN_PCT);
@@ -169,6 +175,7 @@ export function menuEntries(state: State, now = Date.now()): MenuEntry[] {
   entries.push(
     { label: "", separator: true },
     { label: "$(refresh) Refresh Now", action: "refresh" },
+    { label: "$(link-external) Open Usage in Browser", action: "openUsage" },
     { label: "$(key) Open Credentials File", action: "openCredentials" },
     { label: "$(gear) Settings", action: "openSettings" },
   );

@@ -58,6 +58,10 @@
         "title": "Claude Limits Meter: Refresh Now"
       },
       {
+        "command": "claudeLimitsMeter.openUsage",
+        "title": "Claude Limits Meter: Open Usage in Browser"
+      },
+      {
         "command": "claudeLimitsMeter.openCredentials",
         "title": "Claude Limits Meter: Open Credentials File"
       },
