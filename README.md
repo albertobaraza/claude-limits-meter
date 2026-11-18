@@ -7,7 +7,8 @@ Shows your [Claude Code](https://code.claude.com) usage limits, the **5-hour ses
 ```
 ✦ 42%                                          ← status bar: current 5-hour session usage
 
-Session (5h) 42% · Weekly (7d) 18%             ← hover: a short summary
+Session · 42% · 2h 13m                         ← hover: both windows, lined up
+Weekly  · 18% · 4d 2h
 Last checked 14:32
 
 Session (5h)  ████░░░░░░ 42%   ⏱ 2h 13m       ← click: the details
@@ -15,7 +16,7 @@ Weekly (7d)   ██░░░░░░░░ 18%   ⏱ 4d 2h
 Last checked  14:32
 ```
 
-Hover the status bar item for a short summary of both windows. Click it for the details (a bar and the time until each window resets, and when the usage was last checked), plus **Refresh Now**, **Open Usage in Browser** (Claude's own usage page, for the full detail), **Open Credentials File** and **Settings** (this extension's settings). When either window reaches 90%, the status bar text turns yellow. It is deliberately minimal.
+Hover the status bar item for both windows one above the other, with how much of each is used and the time until it resets. Click it for the same with a bar for each (and the length of each window), and when the usage was last checked, plus **Refresh Now**, **Open Usage in Browser** (Claude's own usage page, for the full detail), **Open Credentials File** and **Settings** (this extension's settings). When either window reaches 90%, the status bar text turns yellow. It is deliberately minimal.
 
 ## What the item shows
 
