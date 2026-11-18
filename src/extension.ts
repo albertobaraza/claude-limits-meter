@@ -64,6 +64,8 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
   let inFlight: Promise<void> | undefined;
   let lastPollAt = 0;
   let timer: NodeJS.Timeout | undefined;
+  /** The tooltip's Markdown as last set, so a redraw that changes nothing leaves an open hover alone. */
+  let shownTooltip = "";
   /** Set on deactivation: a check still in flight must not draw, or arm the timer again, after that. */
   let disposed = false;
 
@@ -145,10 +147,12 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
     const commands = { refresh: CMD_REFRESH, openSettings: CMD_OPEN_SETTINGS };
     const plain = statusView(state, commands, Date.now(), { showWeekly: cfg().get<boolean>("showWeekly", false) });
     const view = dev ? devView(plain) : plain;
-    const tooltip = new vscode.MarkdownString(view.markdown, true);
-    tooltip.isTrusted = { enabledCommands: [CMD_REFRESH, CMD_OPEN_SETTINGS] };
     item.text = view.text;
     item.color = view.warn ? new vscode.ThemeColor("terminal.ansiYellow") : undefined;
+    if (view.markdown === shownTooltip) return;
+    shownTooltip = view.markdown;
+    const tooltip = new vscode.MarkdownString(view.markdown, true);
+    tooltip.isTrusted = { enabledCommands: [CMD_REFRESH, CMD_OPEN_SETTINGS] };
     item.tooltip = tooltip;
   }
 
@@ -287,6 +291,9 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
   }
 
   const stopWatching = watchSharedFile(sharedFile, () => void followOtherWindows());
+  // The hover counts down to each reset, so it is drawn again every minute: with the window unfocused, or while Claude is rate
+  // limiting us, no check may come for a long time, and the minutes it shows would only be right at the last one.
+  const clock = setInterval(render, 60_000);
 
   context.subscriptions.push(
     log,
@@ -295,6 +302,7 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
       dispose: () => {
         disposed = true;
         clearTimeout(timer);
+        clearInterval(clock);
         stopWatching();
         stopWatchingRequests?.();
       },

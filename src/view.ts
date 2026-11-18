@@ -48,9 +48,20 @@ export interface Commands {
   openSettings: string;
 }
 
-/** The hover's summary of the two windows: the percentages only; bars and reset times are in the click menu. */
-function summaryLine(s: Snapshot): string {
-  return `Session (5h) **${pctText(s.fiveHour).trim()}** · Weekly (7d) **${pctText(s.sevenDay).trim()}**`;
+/**
+ * The hover's summary of the two windows: one row each, in a table so the columns line up, with how much is used and how long
+ * until it resets. The bars, and the "(5h)" and "(7d)", are only in the click menu. The table has no header text (Markdown
+ * wants a header row, so it is an empty one, which takes no visible room). The "·" between the columns are columns of their own:
+ * in the cell of a right-aligned percentage a dot would move with the number of digits, in a column it stays in line.
+ * Everything in it is a number or a duration, never text from outside.
+ */
+function summaryTable(s: Snapshot, now: number): string {
+  return [
+    "| | | | | |",
+    "| :-- | :-: | --: | :-: | :-- |",
+    `| Session | · | **${pctText(s.fiveHour).trim()}** | · | ${timeLeft(s.fiveHourReset, now)} |`,
+    `| Weekly | · | **${pctText(s.sevenDay).trim()}** | · | ${timeLeft(s.sevenDayReset, now)} |`,
+  ].join("\n");
 }
 
 /** The numbers in the status-bar text: the 5-hour session alone, or labelled next to the 7-day week. */
@@ -111,7 +122,7 @@ export function statusView(
     state.snapshot &&
     (state.status === "ok" || state.status === "error" || state.status === "expired" || state.status === "rateLimited")
   ) {
-    markdown += `\n\n${summaryLine(state.snapshot)}\n\n_Last checked ${clockTime(state.snapshot.checkedAt)}_`;
+    markdown += `\n\n${summaryTable(state.snapshot, now)}\n\n_Last checked ${clockTime(state.snapshot.checkedAt)}_`;
   }
   markdown += `\n\n[Refresh Now](command:${commands.refresh}) · [Settings](command:${commands.openSettings})`;
   // Only a state whose text shows a reading: "!", "✗", "—" and "…" stand for no number, so they are not coloured.
