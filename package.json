@@ -2,7 +2,7 @@
   "name": "claude-limits-meter",
   "displayName": "Claude Limits Meter",
   "description": "Unofficial. Your Claude Code 5-hour session and 7-day weekly usage in the status bar. Works on Linux, macOS, Windows, WSL and remote hosts.",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "publisher": "albertobaraza",
   "icon": "images/icon.png",
   "license": "MIT",
@@ -56,6 +56,10 @@
       {
         "command": "claudeLimitsMeter.refresh",
         "title": "Claude Limits Meter: Refresh Now"
+      },
+      {
+        "command": "claudeLimitsMeter.openUsage",
+        "title": "Claude Limits Meter: Open Usage in Browser"
       },
       {
         "command": "claudeLimitsMeter.openCredentials",

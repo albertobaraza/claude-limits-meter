@@ -87,7 +87,9 @@ the UI side.
   read from User settings only, like renewal: it makes the extension write outside its storage folder.
 - **No runtime dependencies.** `devDependencies` only. A new runtime dependency needs a reason in the PR.
 - **The only hosts contacted** are `api.anthropic.com` (usage) and, when renewal is on, `console.anthropic.com`. No
-  telemetry. `README.md` ("Privacy and security") says so; change one, change the other.
+  telemetry. The one link out, *Open Usage in Browser*, hands the fixed `USAGE_PAGE_URL` (`view.ts`) to the user's browser
+  through `vscode.env.openExternal`: the extension never requests that page and adds nothing to the address.
+  `README.md` ("Privacy and security") says so; change one, change the other.
 - **Only a test host may redirect those hosts, and only to the loopback.** `TEST_ENV` (`claude.ts`) names the
   environment variables the integration test sets to point the extension at its fake API; `extension.ts` reads them only
   when `context.extensionMode === Test`, and `testOverrides` throws on any URL that is not `http://` on `127.0.0.1`,

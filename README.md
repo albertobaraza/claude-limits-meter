@@ -7,7 +7,8 @@ Shows your [Claude Code](https://code.claude.com) usage limits, the **5-hour ses
 ```
 ✦ 42%                                          ← status bar: current 5-hour session usage
 
-Session (5h) 42% · Weekly (7d) 18%             ← hover: a short summary
+Session · 42% · 2h 13m                         ← hover: both windows, lined up
+Weekly  · 18% · 4d 2h
 Last checked 14:32
 
 Session (5h)  ████░░░░░░ 42%   ⏱ 2h 13m       ← click: the details
@@ -15,7 +16,7 @@ Weekly (7d)   ██░░░░░░░░ 18%   ⏱ 4d 2h
 Last checked  14:32
 ```
 
-Hover the status bar item for a short summary of both windows. Click it for the details (a bar and the time until each window resets, and when the usage was last checked), plus **Refresh Now**, **Open Credentials File** and **Settings** (this extension's settings). When either window reaches 90%, the status bar text turns yellow. It is deliberately minimal.
+Hover the status bar item for both windows one above the other, with how much of each is used and the time until it resets. Click it for the same with a bar for each (and the length of each window), and when the usage was last checked, plus **Refresh Now**, **Open Usage in Browser** (Claude's own usage page, for the full detail), **Open Credentials File** and **Settings** (this extension's settings). When either window reaches 90%, the status bar text turns yellow. It is deliberately minimal.
 
 ## What the item shows
 
@@ -65,12 +66,13 @@ If you would rather renew from here, turn on **`claudeLimitsMeter.refreshExpired
 
 ## Commands
 
-Run them from the Command Palette (Ctrl+Shift+P / Cmd+Shift+P). The last three are also in the menu that opens when you click the status bar item.
+Run them from the Command Palette (Ctrl+Shift+P / Cmd+Shift+P). The last four are also in the menu that opens when you click the status bar item.
 
 | Command | |
 | --- | --- |
 | `Claude Limits Meter: Show Menu` | The menu the status bar item opens: the usage with a bar and reset time for each window, when it was last checked, and the other commands. |
 | `Claude Limits Meter: Refresh Now` | Asks Claude for a fresh reading, at most once every 10 seconds and not while Claude is asking you to wait. |
+| `Claude Limits Meter: Open Usage in Browser` | Opens [claude.ai/settings/usage](https://claude.ai/settings/usage) in your default browser, where Claude shows your usage in full. The browser asks you to sign in to claude.ai if you are not already. The extension itself does not contact that address. |
 | `Claude Limits Meter: Open Credentials File` | Opens the Claude Code login file in an editor (a login kept in the macOS Keychain has no file to open). It contains live tokens, so be careful about screen sharing. |
 | `Claude Limits Meter: Open Settings` | Opens the Settings editor filtered to this extension. |
 
@@ -119,6 +121,7 @@ With several VS Code windows open on the same machine, they ask Claude about as 
 ## Privacy and security
 
 - Reads your Claude Code login (file or Keychain) and sends the **access token only to `api.anthropic.com`** to read your usage. With token refresh switched on it also contacts `console.anthropic.com`. Nothing else is contacted, and there is no telemetry. No setting or environment variable of the installed extension changes where your token is sent (only a VS Code test host can point it at a fake API, and only one on your own machine).
+- *Open Usage in Browser* hands `https://claude.ai/settings/usage` to your browser and nothing else: no token, no reading and no identifier is added to the address, and the extension does not request that page.
 - Keeps one small file in the extension's storage folder, on the machine that runs the extension, so your VS Code windows can share what they find out (the extension watches it for changes): the last reading, when a `429` says to wait until, and a one-way fingerprint of the login (a truncated SHA-256 of the access token, so a reading is never shown for another account). It holds no token, and the file is readable by you only (mode 600).
 - With `commandLine` switched on (it is off by default), keeps a second small folder in your user state folder for other programs: the last reading, a launcher for the `claude-limits` command and, for a moment, a request for a fresh reading. It holds no token and no fingerprint of one, and is readable by you only (mode 700). Any program running as you can read it, and can make the extension ask Claude for a reading at most once a minute.
 - Never writes your login unless you enable `refreshExpiredToken`, and then only in the credentials file. When it rewrites that file it leaves it readable by you only (mode 600).

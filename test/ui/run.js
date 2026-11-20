@@ -154,7 +154,7 @@ const scenarios = {
       const tooltip = await hoverTooltip(page, item, "no-login");
       assert.match(tooltip, /No Claude Code login found on this machine/);
       assert.match(tooltip, /Refresh Now/);
-      assert.match(tooltip, /Open Credentials File/);
+      assert.doesNotMatch(tooltip, /Open Usage in Browser|Open Credentials File/, "the hover has only the quick actions");
       assert.match(tooltip, /\bSettings\b/);
       assert.doesNotMatch(tooltip, /Development build/, "an installed .vsix is not a development build");
 
@@ -163,6 +163,7 @@ const scenarios = {
       assert.match(menu, /Usage[\s\S]*no credentials/);
       assert.match(menu, /No Claude Code login found/);
       assert.match(menu, /Refresh Now/);
+      assert.match(menu, /Open Usage in Browser/);
       assert.match(menu, /Open Credentials File/);
       assert.match(menu, /\bSettings\b/);
 

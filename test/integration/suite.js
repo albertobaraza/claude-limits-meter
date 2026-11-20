@@ -134,7 +134,8 @@ const checks = {
 
     const item = await checked();
     assert.equal(item.text, "$(sparkle) 42% DEV");
-    assertIn(item.tooltip, "Session (5h) **42%** · Weekly (7d) **13%**", "the tooltip");
+    assertIn(item.tooltip, "| Session | · | **42%** |", "the tooltip");
+    assertIn(item.tooltip, "| Weekly | · | **13%** |", "the tooltip");
     assertIn(item.tooltip, "Last checked", "the tooltip");
 
     const [sent, ...rest] = await requests();
@@ -150,7 +151,7 @@ const checks = {
     const item = await checked();
     assert.equal(item.text, "$(clock) 42% DEV");
     assertIn(item.tooltip, "rate limiting", "the tooltip");
-    assertIn(item.tooltip, "Session (5h) **42%**", "the tooltip, still showing the last reading");
+    assertIn(item.tooltip, "| Session | · | **42%** |", "the tooltip, still showing the last reading");
 
     await forgetRequests();
     await vscode.commands.executeCommand("claudeLimitsMeter.refresh");
@@ -163,7 +164,7 @@ const checks = {
     const item = await checked();
     assert.equal(item.text, "$(sparkle) ! DEV");
     assertIn(item.tooltip, "has expired", "the tooltip");
-    assertIn(item.tooltip, "Session (5h) **42%**", "the tooltip");
+    assertIn(item.tooltip, "| Session | · | **42%** |", "the tooltip");
   },
 
   async "a 500 shows an error and the status, never a response body"() {
@@ -191,7 +192,8 @@ const checks = {
     await answer(200, { body: reading(55.1, 20) });
     const item = await checked();
     assert.equal(item.text, "$(sparkle) 55% DEV");
-    assertIn(item.tooltip, "Session (5h) **55%** · Weekly (7d) **20%**", "the tooltip");
+    assertIn(item.tooltip, "| Session | · | **55%** |", "the tooltip");
+    assertIn(item.tooltip, "| Weekly | · | **20%** |", "the tooltip");
     assert.ok(!item.tooltip.includes("HTTP 500"), "the error is gone");
   },
 
@@ -292,7 +294,7 @@ const checks = {
     const item = api.statusBar();
     assert.equal(item.text, "$(clock) 61% DEV");
     assertIn(item.tooltip, "rate limiting", "the tooltip");
-    assertIn(item.tooltip, "Session (5h) **61%**", "the tooltip, still showing the last reading");
+    assertIn(item.tooltip, "| Session | · | **61%** |", "the tooltip, still showing the last reading");
 
     await vscode.commands.executeCommand("claudeLimitsMeter.refresh");
     assert.deepEqual(await requests(), [], "Refresh Now does not get round it either");
@@ -309,7 +311,8 @@ const checks = {
     assert.deepEqual(await requests(), [], "no request for a reading that is seconds old");
     const item = api.statusBar();
     assert.equal(item.text, "$(sparkle) 77% DEV");
-    assertIn(item.tooltip, "Session (5h) **77%** · Weekly (7d) **33%**", "the tooltip");
+    assertIn(item.tooltip, "| Session | · | **77%** |", "the tooltip");
+    assertIn(item.tooltip, "| Weekly | · | **33%** |", "the tooltip");
   },
 
   async "a reading that is old by now is not reused: the API is asked, and the answer is told to the other windows"() {
@@ -365,7 +368,8 @@ const checks = {
       snapshot: { fiveHour: 88, sevenDay: 44, fiveHourReset: inHours(1), sevenDayReset: inHours(48), checkedAt: Date.now() },
     });
     await itemShows("$(sparkle) 88% DEV");
-    assertIn(api.statusBar().tooltip, "Session (5h) **88%** · Weekly (7d) **44%**", "the tooltip");
+    assertIn(api.statusBar().tooltip, "| Session | · | **88%** |", "the tooltip");
+    assertIn(api.statusBar().tooltip, "| Weekly | · | **44%** |", "the tooltip");
     assert.deepEqual(await requests(), [], "following the other window asks nothing");
   },
 

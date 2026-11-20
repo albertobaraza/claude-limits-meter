@@ -21,10 +21,11 @@ import {
   userSetting,
   type State,
 } from "./state";
-import { SETTINGS, devView, menuEntries, statusView } from "./view";
+import { SETTINGS, USAGE_PAGE_URL, devView, menuEntries, statusView } from "./view";
 
 const CMD_MENU = `${SETTINGS}.showMenu`;
 const CMD_REFRESH = `${SETTINGS}.refresh`;
+const CMD_OPEN_USAGE = `${SETTINGS}.openUsage`;
 const CMD_OPEN_CREDS = `${SETTINGS}.openCredentials`;
 const CMD_OPEN_SETTINGS = `${SETTINGS}.openSettings`;
 
@@ -63,6 +64,8 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
   let inFlight: Promise<void> | undefined;
   let lastPollAt = 0;
   let timer: NodeJS.Timeout | undefined;
+  /** The tooltip's Markdown as last set, so a redraw that changes nothing leaves an open hover alone. */
+  let shownTooltip = "";
   /** Set on deactivation: a check still in flight must not draw, or arm the timer again, after that. */
   let disposed = false;
 
@@ -141,13 +144,15 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
 
   // ── rendering ──
   function render() {
-    const commands = { refresh: CMD_REFRESH, openCredentials: CMD_OPEN_CREDS, openSettings: CMD_OPEN_SETTINGS };
+    const commands = { refresh: CMD_REFRESH, openSettings: CMD_OPEN_SETTINGS };
     const plain = statusView(state, commands, Date.now(), { showWeekly: cfg().get<boolean>("showWeekly", false) });
     const view = dev ? devView(plain) : plain;
-    const tooltip = new vscode.MarkdownString(view.markdown, true);
-    tooltip.isTrusted = { enabledCommands: [CMD_REFRESH, CMD_OPEN_CREDS, CMD_OPEN_SETTINGS] };
     item.text = view.text;
     item.color = view.warn ? new vscode.ThemeColor("terminal.ansiYellow") : undefined;
+    if (view.markdown === shownTooltip) return;
+    shownTooltip = view.markdown;
+    const tooltip = new vscode.MarkdownString(view.markdown, true);
+    tooltip.isTrusted = { enabledCommands: [CMD_REFRESH, CMD_OPEN_SETTINGS] };
     item.tooltip = tooltip;
   }
 
@@ -249,6 +254,15 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
   }
 
   // ── commands ──
+  /**
+   * Claude's own usage page, in the user's browser. `openExternal` hands it to the machine the window is shown on, so it also
+   * works from WSL, Remote-SSH and a container, where this extension runs but there is no browser.
+   */
+  async function openUsage() {
+    const opened = await vscode.env.openExternal(vscode.Uri.parse(USAGE_PAGE_URL));
+    if (!opened) logLine(`Could not open ${USAGE_PAGE_URL} in a browser`);
+  }
+
   async function openCredentials() {
     try {
       await vscode.window.showTextDocument(vscode.Uri.file(CREDS_PATH));
@@ -263,7 +277,7 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
   }
 
   async function showMenu() {
-    const actions = { refresh: refreshNow, openCredentials, openSettings };
+    const actions = { refresh: refreshNow, openUsage, openCredentials, openSettings };
     type Item = vscode.QuickPickItem & { run?: () => unknown };
     const items: Item[] = menuEntries(state).map((e) => ({
       label: e.label,
@@ -277,6 +291,9 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
   }
 
   const stopWatching = watchSharedFile(sharedFile, () => void followOtherWindows());
+  // The hover counts down to each reset, so it is drawn again every minute: with the window unfocused, or while Claude is rate
+  // limiting us, no check may come for a long time, and the minutes it shows would only be right at the last one.
+  const clock = setInterval(render, 60_000);
 
   context.subscriptions.push(
     log,
@@ -285,12 +302,14 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
       dispose: () => {
         disposed = true;
         clearTimeout(timer);
+        clearInterval(clock);
         stopWatching();
         stopWatchingRequests?.();
       },
     },
     vscode.commands.registerCommand(CMD_MENU, showMenu),
     vscode.commands.registerCommand(CMD_REFRESH, refreshNow),
+    vscode.commands.registerCommand(CMD_OPEN_USAGE, openUsage),
     vscode.commands.registerCommand(CMD_OPEN_CREDS, openCredentials),
     vscode.commands.registerCommand(CMD_OPEN_SETTINGS, openSettings),
     vscode.window.onDidChangeWindowState((s) => {
