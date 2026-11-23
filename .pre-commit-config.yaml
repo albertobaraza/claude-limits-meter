@@ -1,3 +1,9 @@
+# The hooks every repo shares: file hygiene on commit, and the two guards that keep work off main (no commit to it,
+# no push to it), then this repo's own checks (the commit message, and the typecheck and unit tests on push).
+#
+# All three hook types are installed by a plain `pre-commit install`, so the push guard is never left out.
+default_install_hook_types: [pre-commit, commit-msg, pre-push]
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -8,7 +14,10 @@ repos:
       - id: check-merge-conflict
       - id: check-added-large-files
       - id: end-of-file-fixer
+        # A vendored skill is kept as its upstream wrote it.
+        exclude: (^|/)\.claude/skills/security-audit/
       - id: trailing-whitespace
+        exclude: (^|/)\.claude/skills/security-audit/
       - id: no-commit-to-branch
         description: Prevents commits directly to main.
         args: ["--branch", "main"]
