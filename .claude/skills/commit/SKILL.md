@@ -34,7 +34,7 @@ Run `git status` and `git diff` to understand what changed.
 ## 2. Resolve the branch
 
 Check the current branch with `git branch --show-current`. `<base>` is `main`. Never commit
-directly to `<base>` — if the current branch is `<base>`, resolve a feature branch first (see
+directly to `<base>`. If the current branch is `<base>`, resolve a feature branch first (see
 below), then continue to step 3. Otherwise, go straight to step 3.
 
 ### If on the base branch
@@ -43,9 +43,9 @@ below), then continue to step 3. Otherwise, go straight to step 3.
    `NO-ISSUE` option; the user can type a number via "Other" (e.g. `42`).
 2. From the diff already gathered in step 1, generate a short kebab-case description of the
    change (e.g. `add-run-skill`).
-3. Create and switch to the branch locally — this never touches the remote, same as the commit
+3. Create and switch to the branch locally; this never touches the remote, same as the commit
    itself. Always add `--no-track`, so the new branch starts with no upstream at all no matter
-   what local git config is in play — it must never end up tracking `<base>`'s upstream, since a
+   what local git config is in play. It must never end up tracking `<base>`'s upstream, since a
    later plain `git push` would then land straight on `<base>`:
    ```bash
    git checkout -b <issue-id-or-NO-ISSUE>/<short-description> --no-track
@@ -53,16 +53,16 @@ below), then continue to step 3. Otherwise, go straight to step 3.
 4. Verify it actually worked before doing anything else: run `git branch --show-current` again
    and confirm it prints the new branch name, not `<base>`. If the checkout failed (e.g. a branch
    with that name already exists) and you're still on `<base>`, stop and tell the user instead of
-   continuing — never fall through to staging or committing while still on `<base>`.
+   continuing: never fall through to staging or committing while still on `<base>`.
 5. Continue to step 3 on this new branch.
 
 ## 3. Group into logical commits
 
-Group the changes into logical commits — aim for 2–4 focused commits rather than one large one.
+Group the changes into logical commits: aim for 2–4 focused commits rather than one large one.
 
 ### Splitting into multiple commits
 
-**Prefer multiple focused commits over one large commit.** When changes span logically distinct concerns — different features, different layers (backend vs frontend), different bug fixes — split them into separate commits, each staged and committed independently.
+**Prefer multiple focused commits over one large commit.** When changes span logically distinct concerns (different features, different layers such as backend vs frontend, different bug fixes), split them into separate commits, each staged and committed independently.
 
 Ask yourself: *can these changes be described by more than one clear sentence?* If yes, split.
 
@@ -77,9 +77,9 @@ Only bundle everything into one commit if the changes are truly inseparable (e.g
 
 Print the planned commits as a numbered list, then go on to step 5:
 ```
-1. feat: rotation detection and resolve-rotation endpoint — analyze.py, curate.py, state.py
-2. feat: rotation UI with cache-busting — Curate.tsx, api.ts
-3. fix: DD/MM/YYYY date format — StandardizeCards.tsx
+1. feat: rotation detection and resolve-rotation endpoint: analyze.py, curate.py, state.py
+2. feat: rotation UI with cache-busting: Curate.tsx, api.ts
+3. fix: DD/MM/YYYY date format: StandardizeCards.tsx
 ```
 
 ## 5. Stage and commit
