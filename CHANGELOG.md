@@ -4,6 +4,13 @@ All notable changes to this extension are documented here, following
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.2] - 2026-11-23
+
+### Changed
+
+- With no Claude Code login on the machine, the status bar item now reads `no login` next to its icon instead of a dash, so you can tell what it means without hovering.
+- When Claude asks for a pause before the first reading, the item shows the clock with `…` instead of a dash, and the click menu says `no reading yet` where it showed a dash before a reading is taken.
+
 ## [0.8.1] - 2026-11-23
 
 ### Fixed
