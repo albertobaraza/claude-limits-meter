@@ -2,33 +2,8 @@
 
 This document covers the day-to-day workflow. See the [README](README.md) for what the extension does,
 [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) for how it behaves in detail (checks, rate limits, several windows, token
-renewal) and [CLAUDE.md](CLAUDE.md) for how the code is organised.
-
-## Setup
-
-```bash
-bash scripts/setup.sh
-```
-
-It checks Node (22+), installs the dependencies and, if [pre-commit](https://pre-commit.com) is installed
-(`pipx install pre-commit`), the git hooks below. Then see *Running it* to watch a change work.
-
-## Running it
-
-- **F5** in VS Code runs the extension in a development window (`.vscode/launch.json`). The status-bar item says `DEV`.
-- `./scripts/run.sh` (Docker) starts a VS Code in your browser on http://localhost:8788 with the packaged extension, and a mock Claude with a control page on
-  http://localhost:4010 where you change what the usage API answers (a reading, 429, 401, 500) and the login on the
-  machine, and watch the status bar react. Nothing real is involved: no Claude login and no call to Anthropic. Ctrl+C stops it.
-- To build the `.vsix` and install it in your own VS Code:
-
-  ```bash
-  npm ci --ignore-scripts
-  npm run package                 # produces claude-limits-meter-<version>.vsix
-  code --install-extension claude-limits-meter-*.vsix
-  ```
-
-The logic that does not need VS Code lives in `src/claude.ts`, `src/state.ts`, `src/shared.ts`, `src/view.ts`,
-`src/export.ts` and `src/cli.ts` (the `claude-limits` command) and is unit-tested; `src/extension.ts` is only the status-bar glue. The commands that test it are under *Tests* below.
+renewal) and [CLAUDE.md](CLAUDE.md) for how the code is organised. To get a clone working, see *Setup*, *Running it* and
+*Tests* at the end.
 
 ## Branching
 
@@ -43,7 +18,7 @@ The logic that does not need VS Code lives in `src/claude.ts`, `src/state.ts`, `
 
 ## Commit style
 
-Every commit is a one-liner, using the same convention as the [`commit`](.claude/skills/commit) skill:
+Every commit is a one-liner, using the same convention as the `commit` skill:
 
 ```
 feat: Keychain login read on macOS
@@ -65,12 +40,18 @@ commits. Never add a `Co-Authored-By` trailer. The `commit-msg` hook and CI both
 | `chore`    | Build process, CI, tooling or other maintenance that doesn't touch the extension |
 | `test`     | Adding or updating tests                                                 |
 
-> **Note:** the `commit` skill can do this for you.
+> **Note:** the `commit` skill can do this for you, and pushes the branch.
 
-## Git hooks
+## Pre-commit hooks
 
-`bash scripts/setup.sh` installs them for the commit, commit-msg and push stages. To run the commit-stage ones against
-everything: `pre-commit run --all-files`.
+Installed for the commit, commit-msg and push stages, by `bash scripts/setup.sh` or a plain `pre-commit install`
+(`default_install_hook_types` in the config names all three). The commit-stage hooks run automatically on commit; to run
+them manually against everything: `pre-commit run --all-files`.
+
+The push-stage hooks (`stages: [pre-push]`) run on `git push` instead, so they never slow a commit down:
+`no-push-to-main` refuses a push whose destination is `main`, from any branch, since `main` is reached by merging a pull
+request, and `typecheck` and `unit tests` run `npm run typecheck` and `npm test`, the same commands to run by hand.
+See [`.pre-commit-config.yaml`](.pre-commit-config.yaml) for the full list:
 
 | Hook | Stage | Purpose |
 | --- | --- | --- |
@@ -83,28 +64,10 @@ everything: `pre-commit run --all-files`.
 
 The integration test, the coverage gate and the package check run in CI, not on push.
 
-## Tests
-
-| Command | What it covers |
-| --- | --- |
-| `npm test` | Unit tests of `claude.ts`, `state.ts`, `shared.ts`, `view.ts`, `export.ts`, `cli.ts` and the scripts, against a mock server and a stubbed `security` command |
-| `npm run test:coverage` | The same, failing under 90% lines / 85% branches / 80% functions |
-| `npm run test:package` | The `.vsix` holds what it should and nothing else |
-| `xvfb-run -a npm run test:integration` | The extension loaded in a real VS Code with a fake login and a fake Claude API: activates, registers its commands, has its settings, and shows the right status-bar item for no login, a reading, 429, 401, 500, a renewed login, and another window's reading or 429; and, with the command line switched on, writes the usage file and answers a program's request |
-| `xvfb-run -a -s "-screen 0 1280x800x24" npm run test:ui` | The packaged `.vsix` installed in a real VS Code and driven through its window (Playwright): the status-bar item, its hover and its menu, with screenshots in `.vscode-test/screenshots` |
-| `npm run test:integration:docker` | Both of the above in a clean Linux container (`test/ui/Dockerfile`, Node 22, Xvfb). A local convenience; CI uses the native runners |
-
-Both real-VS-Code tests run on a throwaway profile and HOME, and strip the `VSCODE_*` variables a VS Code terminal sets,
-so they never touch your own VS Code or your Claude login. Keep it that way: never run the `code` CLI from a test without
-`cleanEnv()` (`test/integration/common.js`).
-
-A change to the logic comes with a test. Code that needs the `vscode` API stays in `src/extension.ts` and stays thin.
-
 ## Changelog and releases
 
-Run the `changelog` skill ([`.claude/skills/changelog`](.claude/skills/changelog)) on your branch before merging to
-`main`. It updates [`CHANGELOG.md`](CHANGELOG.md) with a new entry and bumps `version` in `package.json` (and the lock
-file) to match.
+Run the `changelog` skill on your branch before merging to `main`. It updates [`CHANGELOG.md`](CHANGELOG.md) with a new
+entry, bumps `version` in `package.json` (and the lock file) to match, commits both and pushes.
 
 To do it by hand instead:
 
@@ -136,7 +99,7 @@ listing) by itself. [docs/RELEASING.md](docs/RELEASING.md) has the details and h
 
 ## Pull requests
 
-Open a pull request against `main` using the [`pr`](.claude/skills/pr) skill (or by hand). CI runs automatically:
+Open a pull request against `main` using the `pr` skill (or by hand). CI runs automatically:
 
 - [`test.yaml`](.github/workflows/test.yaml): typecheck and unit tests on Linux, macOS and Windows, the coverage gate,
   the package check, `npm audit`, the integration test in VS Code 1.125.0 and stable, and the UI test of the packaged
@@ -144,7 +107,7 @@ Open a pull request against `main` using the [`pr`](.claude/skills/pr) skill (or
 - [`ci.yml`](.github/workflows/ci.yml): release metadata, commit messages, file hygiene, `actionlint` on the workflows,
   and Gitleaks over the full history.
 
-The [`ci`](.claude/skills/ci) skill reports how those jobs are doing. [Dependabot](.github/dependabot.yml) opens one
+The `ci` skill reports how those jobs are doing. [Dependabot](.github/dependabot.yml) opens one
 weekly PR covering npm and the workflow actions.
 
 ### Title
@@ -159,23 +122,35 @@ covered by CI. If the branch name starts with an issue number (`42/...`), start 
 
 > **Note:** the `pr` skill can do all of this for you.
 
-## Claude Code
+## Auto mode
 
-The project carries instructions for Claude Code in [CLAUDE.md](CLAUDE.md) and skills in `.claude/skills/`: `commit`,
-`pr`, `changelog`, `ci`, `run`, `release`, `todo` and `security-audit` (see "Security review" below). By default Claude works with you: its skills confirm before
-committing or opening a pull request, and **you push**. `.claude/settings.json` denies Claude `git push`, `gh pr merge`
-and publishing.
+The `commit` skill commits and pushes the feature branch, `changelog` pushes its commit, and `pr`
+rebases the branch onto `main` if it is behind, runs `changelog` itself when CI's changelog
+check would fail without it (a watched path changed and there is no entry, the entry is older
+than the last such change, or the version and the top entry differ), and opens or refreshes the
+pull request. They stop only for an anomaly, which the commit skill lists (a rebase conflict that
+is not mechanical is one). They never push to `main`, never force-push (bar
+`--force-with-lease` right after that rebase), never skip hooks, and never merge.
 
-The `todo` skill keeps a local, untracked `TODO.md` at the repo root as a scratch backlog: it turns the entries into
-GitHub issues (on the "Claude" project board, with a priority) and clears them from the file.
+`/auto on` (the `auto` skill) adds the picking for as long as it is on: Claude picks open issues by
+Priority, works each in a subagent of its own through to a pull request with green CI, and takes the
+next one. A choice of yours that can wait for the pull request's review goes on with Claude's
+recommendation and is noted; an issue that cannot go on without you is parked with its question,
+without asking you, and the loop goes on with the others. Both go into the run's one report,
+`uncommitted/reports/auto-<date>.md` (ignored by git): a Summary, and the Open points under each
+issue, to go through together. It leaves untriaged issues, the ones that ask for a decision, and
+anything that needs work outside the repo to you. `/auto on 42` names the issue instead: Claude
+works that one, whatever its Priority, and stops when its pull request is green. `/auto off`
+switches it off, `/auto status` says where it is. The flag is a file inside `.git`, so it is never
+committed.
 
 ## Security review
 
 Claude Code's built-in `/security-review` reads only the pending diff, so it cannot ask how the checks we already have
 combine into a way in. For that this repo carries Cloudflare's
 [`security-audit` skill](https://github.com/cloudflare/security-audit-skill) (MIT) in
-[`.claude/skills/security-audit`](.claude/skills/security-audit), an unchanged copy pinned to the upstream commit named in
-its [`UPSTREAM.md`](.claude/skills/security-audit/UPSTREAM.md), which also says how to update it. It tells an agent to
+`.claude/skills/security-audit` (in the local Claude Code setup, not in the repository), an unchanged copy pinned to the
+upstream commit named in its `UPSTREAM.md`, which also says how to update it. It tells an agent to
 run things, so read what changed upstream before moving the pin. (If the built-in stops with "ambiguous argument
 'origin/HEAD...'", the clone has no remote HEAD: `git remote set-head origin main` sets it, locally and without the network.)
 
@@ -195,11 +170,11 @@ Other extensions and anything else running as the user are not a boundary: they 
 
 | Change | Checklist |
 | --- | --- |
-| The login: reading the credentials file or the Keychain, writing a renewed one back | [`DESKTOP-MOBILE-AND-LOCAL-IPC.md`](.claude/skills/security-audit/DESKTOP-MOBILE-AND-LOCAL-IPC.md) (local-file and credential-store classes) |
-| The requests to Anthropic: the token refresh, the usage call, redirects, what an error or response may carry | [`WEB-PROTOCOL-AND-AUTH.md`](.claude/skills/security-audit/WEB-PROTOCOL-AND-AUTH.md) (token and key exposure; the identity classes mostly do not apply, we are a client) |
-| Workflows, `release.yaml`, trusted publishing, Dependabot, the `.vsix` contents (`.vscodeignore`) | [`SUPPLY-CHAIN-AND-RELEASE.md`](.claude/skills/security-audit/SUPPLY-CHAIN-AND-RELEASE.md) (CI, release authorization, plugin trust) |
-| The command line: the folder other programs read and leave requests in, the launcher, `src/export.ts` and `src/cli.ts` | [`DESKTOP-MOBILE-AND-LOCAL-IPC.md`](.claude/skills/security-audit/DESKTOP-MOBILE-AND-LOCAL-IPC.md) (local-file and local-IPC classes) |
-| Text from outside shown in the tooltip or menu | [`ATTACK-CLASSES.md`](.claude/skills/security-audit/ATTACK-CLASSES.md) (injection); the browser-only classes in `CLIENT-SIDE.md` do not apply |
+| The login: reading the credentials file or the Keychain, writing a renewed one back | `DESKTOP-MOBILE-AND-LOCAL-IPC.md` (local-file and credential-store classes) |
+| The requests to Anthropic: the token refresh, the usage call, redirects, what an error or response may carry | `WEB-PROTOCOL-AND-AUTH.md` (token and key exposure; the identity classes mostly do not apply, we are a client) |
+| Workflows, `release.yaml`, trusted publishing, Dependabot, the `.vsix` contents (`.vscodeignore`) | `SUPPLY-CHAIN-AND-RELEASE.md` (CI, release authorization, plugin trust) |
+| The command line: the folder other programs read and leave requests in, the launcher, `src/export.ts` and `src/cli.ts` | `DESKTOP-MOBILE-AND-LOCAL-IPC.md` (local-file and local-IPC classes) |
+| Text from outside shown in the tooltip or menu | `ATTACK-CLASSES.md` (injection); the browser-only classes in `CLIENT-SIDE.md` do not apply |
 
 Memory safety, the RPC, cloud, AI and data-isolation checklists do not apply here.
 
@@ -222,3 +197,57 @@ committed) is costly: do not run it for every PR. The `quick` profile fits a rep
 change to the attack surface, such as a new request, a new place the login is written, or a change to the release
 workflow, and keep the run folder between runs, since each run reads the last one's ledger and goes after what it missed.
 Confirmed findings become issues of their own; the ones it cannot settle (`needs_validation`) become questions.
+
+## Setup
+
+```bash
+bash scripts/setup.sh
+```
+
+It checks Node (22+), installs the dependencies and, if [pre-commit](https://pre-commit.com) is installed
+(`pipx install pre-commit`), the git hooks below. Then see *Running it* to watch a change work.
+
+## Running it
+
+- **F5** in VS Code runs the extension in a development window (`.vscode/launch.json`). The status-bar item says `DEV`.
+- `./scripts/run.sh` (Docker) starts a VS Code in your browser on http://localhost:8788 with the packaged extension, and a mock Claude with a control page on
+  http://localhost:4010 where you change what the usage API answers (a reading, 429, 401, 500) and the login on the
+  machine, and watch the status bar react. Nothing real is involved: no Claude login and no call to Anthropic. Ctrl+C stops it.
+- To build the `.vsix` and install it in your own VS Code:
+
+  ```bash
+  npm ci --ignore-scripts
+  npm run package                 # produces claude-limits-meter-<version>.vsix
+  code --install-extension claude-limits-meter-*.vsix
+  ```
+
+The logic that does not need VS Code lives in `src/claude.ts`, `src/state.ts`, `src/shared.ts`, `src/view.ts`,
+`src/export.ts` and `src/cli.ts` (the `claude-limits` command) and is unit-tested; `src/extension.ts` is only the status-bar glue. The commands that test it are under *Tests* below.
+
+## Tests
+
+| Command | What it covers |
+| --- | --- |
+| `npm test` | Unit tests of `claude.ts`, `state.ts`, `shared.ts`, `view.ts`, `export.ts`, `cli.ts` and the scripts, against a mock server and a stubbed `security` command |
+| `npm run test:coverage` | The same, failing under 90% lines / 85% branches / 80% functions |
+| `npm run test:package` | The `.vsix` holds what it should and nothing else |
+| `xvfb-run -a npm run test:integration` | The extension loaded in a real VS Code with a fake login and a fake Claude API: activates, registers its commands, has its settings, and shows the right status-bar item for no login, a reading, 429, 401, 500, a renewed login, and another window's reading or 429; and, with the command line switched on, writes the usage file and answers a program's request |
+| `xvfb-run -a -s "-screen 0 1280x800x24" npm run test:ui` | The packaged `.vsix` installed in a real VS Code and driven through its window (Playwright): the status-bar item, its hover and its menu, with screenshots in `.vscode-test/screenshots` |
+| `npm run test:integration:docker` | Both of the above in a clean Linux container (`test/ui/Dockerfile`, Node 22, Xvfb). A local convenience; CI uses the native runners |
+
+Both real-VS-Code tests run on a throwaway profile and HOME, and strip the `VSCODE_*` variables a VS Code terminal sets,
+so they never touch your own VS Code or your Claude login. Keep it that way: never run the `code` CLI from a test without
+`cleanEnv()` (`test/integration/common.js`).
+
+A change to the logic comes with a test. Code that needs the `vscode` API stays in `src/extension.ts` and stays thin.
+
+## Claude Code
+
+The project carries instructions for Claude Code in [CLAUDE.md](CLAUDE.md). Its skills and settings live in `.claude/`,
+which is kept locally and not committed (`.gitignore`): `.claude/skills/` holds `commit`, `pr`, `changelog`, `ci`, `todo`,
+`auto`, `run`, `release` and `security-audit` (see "Security review" above), and `.claude/settings.json` denies Claude
+`gh pr merge` and publishing. `commit`, `changelog` and `pr` push the feature branch themselves (see "Auto mode" above
+for what they never do); a merge, which releases, and publishing stay yours.
+
+The `todo` skill keeps a local, untracked `TODO.md` at the repo root as a scratch backlog: it turns the entries into
+GitHub issues (on the "Claude" project board, with a priority) and clears them from the file.
