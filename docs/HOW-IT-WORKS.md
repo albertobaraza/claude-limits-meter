@@ -55,8 +55,9 @@ can switch it on: a workspace's `.vscode/settings.json` is ignored for it.
 - `claude-limits.cjs` is a launcher the extension writes each time it starts. It runs the command inside the installed
   extension, whose own path changes with every version.
 - A program asks for a fresh reading by leaving a file named `refresh-request` in the folder, which is what
-  `claude-limits --fresh` does. Every window watches the folder, one of them takes the request (removing the file is what
-  decides which), and that one checks, **focused or not**. The answer is the usage file changing.
+  `claude-limits --fresh` does. Every window watches the folder, one of them takes the request (the one that creates
+  `refresh-request.taken`, which only one can, decides which; it removes the request, then the claim), and that one checks,
+  **focused or not**. The answer is the usage file changing.
 - A request is answered a minute after the last check at the earliest, and never during a wait after a `429`. Too early,
   it is taken and not answered: the program sees no new reading and exits with 2. So a program cannot make the extension
   ask Claude more often than the status bar's own checks do.

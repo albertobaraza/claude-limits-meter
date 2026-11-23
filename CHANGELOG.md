@@ -4,6 +4,12 @@ All notable changes to this extension are documented here, following
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1] - 2026-11-23
+
+### Fixed
+
+- With several VS Code windows open on Windows, a request for a fresh reading from `claude-limits --fresh` is now taken by one window only, as on macOS and Linux. Before, two or three windows could each take the same request, so Claude could be asked more than once for it.
+
 ## [0.8.0] - 2026-11-18
 
 ### Added

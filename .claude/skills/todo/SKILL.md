@@ -7,7 +7,7 @@ allowed-tools: Bash(find *) Bash(gh issue *) Bash(gh repo view *) Bash(gh projec
 Sync the entries in `TODO.md` with this repo's GitHub issues and its project board. Follow the steps
 below in order.
 
-`<board>` is `6` and `<board-owner>` is `albertorga`: the project board **Claude**
+`<board>` is `6` and `<board-owner>` is `albertorga`: this repo's GitHub project board, **Claude**
 (https://github.com/orgs/albertorga/projects/6), with one custom field, **Priority**
 (`Urgent`/`High`/`Medium`/`Low`). Every step below references `<board>` and `<board-owner>`. The board
 belongs to the `albertorga` organization while this repo is under a personal account, which is also why
@@ -41,12 +41,13 @@ Open and closed issues both count: a closed issue that covers the entry means it
 or decided, so don't recreate it. Tell the user about that match and leave the entry for them to
 decide on (don't delete it in step 5).
 
-From the project item list, note each issue's current `priority` (by its `content.number`): an entry
-that omits `priority` gets `low` only on an issue that has none (step 4), and setting one again
-is otherwise harmless. From the
-issue list, note each issue's current `parent` and `blockedBy`/`blocking` issue numbers; you must
-check these before setting or adding to them, since GitHub rejects a relationship that already
-exists. `relates to` has no such restriction (step 4), so it needs no pre-check.
+From the project item list, keep only the items whose `content.repository` is this repo: a board
+can hold several repos' issues, and their numbers overlap. Then note each issue's current `priority`
+(by its `content.number`): an entry that omits `priority` gets `low` only on an issue that has none
+(step 4), and setting one again is otherwise harmless. From the issue list, note each issue's current
+`parent` and `blockedBy`/`blocking` issue numbers; you must check these before setting or adding to
+them, since GitHub rejects a relationship that already exists. `relates to` has no such restriction
+(step 4), so it needs no pre-check.
 
 ## 3. Match each entry, then act on title and body
 
@@ -110,9 +111,7 @@ number:
   ```
   The default only fills a gap: when the entry omits `priority` and the issue already has one on the
   board (step 2), leave it as it is. Never lower an issue's priority to `Low` because the entry said
-  nothing. If the board refuses the issue (it is an organization board and the repo is a personal
-  one), don't retry in another way: note it in the final report and carry on with the other
-  properties.
+  nothing.
 - **`parent`**: resolve its one reference. If it already equals that issue's current `parent` from
   step 2, skip. Otherwise:
   ```bash
@@ -151,7 +150,7 @@ be applied and why.
 Then list **all open issues** (`gh issue list --state open --limit 100 --json number,title,url`),
 grouped by their Priority field from the project board
 (`gh project item-list <board> --owner <board-owner> --format json --limit 200`, matched by
-`content.number`). Use a two-level list: the top level is a
+`content.number` among this repo's items, as in step 2). Use a two-level list: the top level is a
 `###` heading per priority, ordered `Urgent`, `High`, `Medium`, `Low`, then a final `### No
 priority` section for issues with no Priority value (or not on the board at all) — always last,
 regardless of how many issues fall there. Within each section, sort by issue number, in exactly this
@@ -160,11 +159,11 @@ shape, with the issue number as a markdown link to the issue and no separate URL
 ```
 ### Urgent
 
-- [#4](https://github.com/<owner>/<repo>/issues/4) Token renewal loses the login on a failed write
+- [#4](https://github.com/<owner>/<repo>/issues/4) Focus mode while playing
 
 ### High
 
-- [#5](https://github.com/<owner>/<repo>/issues/5) Show the reset time in the status bar text
+- [#5](https://github.com/<owner>/<repo>/issues/5) Mobile: prevent double-tap zoom and fit the board on screen while playing
 
 ### No priority
 

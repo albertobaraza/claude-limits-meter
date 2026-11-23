@@ -99,7 +99,7 @@ the UI side.
 - Windows and macOS are first-class: no shell-outs except `security` through `execFile` (no shell), paths through
   `path`, and no assumption about file modes (`chmod` is a no-op on Windows).
 
-## Tests
+### Tests
 
 `test/unit/` mirrors `src/` and `scripts/` (run against the compiled `out/`). `test/integration/` is the real-VS-Code test:
 `run.js` starts VS Code with a throwaway HOME and a fake Claude API (`fake-api.js`, steered over HTTP by the suite), and
@@ -118,15 +118,27 @@ a test; the coverage gate in CI fails below the thresholds. There is no linter: 
 
 ## Conventions
 
-There are two ways of working. In **interactive mode** (the default), Claude never runs `git push`, period: tracked
-branch or brand new, mid-skill or not, with or without confirmation (`.claude/settings.json` denies it too). Pushing is the
-user's own action; if a skill needs a branch pushed before it can continue, it stops and asks the user to push it. Claude
-also never merges a pull request and never publishes (`vsce publish`, `npm publish`): a merge releases, and publishing is
-the user's call. **Nobody pushes to `main`**: it is reached by merging a pull request (the `no-push-to-main` and
-`no-commit-to-branch` hooks, and `scripts/protect-main.sh` on GitHub once the repo is public).
-
-Contribution workflow (branch names, commit style, hooks, changelog, PRs) is in [CONTRIBUTING.md](CONTRIBUTING.md): follow
-it instead of improvising. Never add a `Co-Authored-By` trailer.
+- The `commit` skill commits and pushes the feature branch, the `changelog` skill pushes its
+  commit, and the `pr` skill rebases the branch onto `main` if it is behind, runs the
+  `changelog` skill itself when CI's changelog check would fail without it, and opens or
+  refreshes the pull request. They stop only for an **anomaly**, listed in
+  `.claude/skills/commit/SKILL.md` (a rebase conflict that is not mechanical is one). Claude
+  never pushes to `main` or from a branch that tracks it, never force-pushes (bar
+  `--force-with-lease` right after that rebase), never skips hooks, never amends a pushed commit,
+  and never merges a pull request: a merge releases. Claude also never publishes (`vsce publish`,
+  `npm publish`): publishing is the user's call. `.claude/settings.json` denies both publishing and `gh pr merge`.
+  **Nobody pushes to `main`**: it is reached by merging a pull request (the `no-push-to-main` and
+  `no-commit-to-branch` hooks, and `scripts/protect-main.sh` on GitHub once the repo is public).
+- **Auto mode**, which the user switches on with `/auto on` and which is on only while the flag file
+  named in `.claude/skills/auto/SKILL.md` exists, adds the picking: Claude takes issues by priority
+  and works each through to a pull request with green CI. A choice of the user's that can wait goes
+  on with Claude's recommendation and is noted to review together; an issue that cannot go on
+  without the user is parked with its question, never asked directly, and the loop goes on with the
+  other issues. Either way it goes into the run's one report, in `uncommitted/reports/` (Summary,
+  then Open points by issue). A number after it (`/auto on 42`) is the issue to resolve, that one
+  alone, and never a count of issues.
+- Contribution workflow (branch names, commit style, hooks, changelog, PRs) is in
+  [CONTRIBUTING.md](CONTRIBUTING.md): follow it instead of improvising. Never add a `Co-Authored-By` trailer.
 
 ## CI/CD
 

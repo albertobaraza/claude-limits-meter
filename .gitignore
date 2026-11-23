@@ -15,3 +15,6 @@ out/
 
 # Personal editor settings. The rest of .vscode/ (launch, tasks, extensions) is shared and stays tracked.
 .vscode/settings.json
+
+# Auto mode's run reports (see the `auto` skill): local, never committed.
+uncommitted/
