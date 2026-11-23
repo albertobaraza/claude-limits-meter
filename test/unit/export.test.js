@@ -189,6 +189,29 @@ test("a request is taken by one window only, and once", async () => {
   assert.equal(await files.claimRequest(), false, "it is gone");
 });
 
+test("while another window holds the claim this one takes nothing, and the request stays for it", async () => {
+  const { files, dir } = makeExport();
+  fs.mkdirSync(dir, { recursive: true });
+  await files.request();
+  fs.writeFileSync(files.claimFile, "");
+  assert.equal(await files.claimRequest(), false);
+  assert.equal(fs.existsSync(files.requestFile), true, "the request is the other window's to remove");
+  assert.equal(fs.existsSync(files.claimFile), true, "and its claim is left alone");
+});
+
+test("a claim left by a window that died is cleared once it is old, and the next call takes the request", async () => {
+  const { files, dir } = makeExport();
+  fs.mkdirSync(dir, { recursive: true });
+  await files.request();
+  fs.writeFileSync(files.claimFile, "");
+  const old = new Date(Date.now() - 60_000);
+  fs.utimesSync(files.claimFile, old, old);
+  assert.equal(await files.claimRequest(), false, "the call that finds it only clears it");
+  assert.equal(fs.existsSync(files.claimFile), false);
+  assert.equal(await files.claimRequest(), true);
+  assert.equal(fs.existsSync(files.requestFile), false);
+});
+
 test("a request nobody answered is taken back", async () => {
   const { files, dir } = makeExport();
   fs.mkdirSync(dir, { recursive: true });

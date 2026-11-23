@@ -16,6 +16,9 @@ import type { Snapshot, Status } from "./state";
 const FOLDER = "claude-limits-meter";
 const USAGE_FILE = "usage.json";
 const REQUEST_FILE = "refresh-request";
+const CLAIM_FILE = "refresh-request.taken";
+/** A claim this old was left by a window that died while taking a request: nobody holds one for more than an instant. */
+const STALE_CLAIM_MS = 10_000;
 const LAUNCHER_FILE = "claude-limits.cjs";
 const VERSION = 1;
 
@@ -111,6 +114,8 @@ export function launcherSource(cliPath: string): string {
 export class UsageExport {
   readonly usageFile: string;
   readonly requestFile: string;
+  /** Held by the window taking a request, for as long as it takes to remove it (see `claimRequest`). */
+  readonly claimFile: string;
   readonly launcherFile: string;
   /** `checkedAt` of the reading this window last wrote, so that the same one is not written at every check. */
   private written: number | undefined;
@@ -118,6 +123,7 @@ export class UsageExport {
   constructor(readonly dir: string) {
     this.usageFile = path.join(dir, USAGE_FILE);
     this.requestFile = path.join(dir, REQUEST_FILE);
+    this.claimFile = path.join(dir, CLAIM_FILE);
     this.launcherFile = path.join(dir, LAUNCHER_FILE);
   }
 
@@ -175,21 +181,38 @@ export class UsageExport {
 
   /**
    * Takes the request for a fresh reading, if there is one. Every window sees the request and one alone may answer it:
-   * removing a file succeeds for one of them, and that one gets `true`.
+   * the one that creates the claim file, which an exclusive create (`wx`) allows to one of them on every system. Removing
+   * the request is not enough on its own: on Windows several windows removing it at once can each be told they did, while
+   * the file is still pending deletion. The claim is held until the request is gone, so a window that comes after finds
+   * no request; one left behind by a window that died is cleared once it is old, and that call takes nothing.
    */
   async claimRequest(): Promise<boolean> {
+    try {
+      await fs.access(this.requestFile);
+    } catch {
+      return false;
+    }
+    try {
+      await fs.writeFile(this.claimFile, "", { flag: "wx", mode: 0o600 });
+    } catch {
+      const info = await fs.stat(this.claimFile).catch(() => undefined);
+      if (info && Date.now() - info.mtimeMs > STALE_CLAIM_MS) await fs.rm(this.claimFile, { force: true }).catch(() => {});
+      return false;
+    }
     try {
       await fs.unlink(this.requestFile);
       return true;
     } catch {
-      return false;
+      return false; // taken and removed by a window that held the claim just before this one
+    } finally {
+      await fs.rm(this.claimFile, { force: true }).catch(() => {});
     }
   }
 
   /** The setting was switched off: removes the three files, and the folder if nothing else is in it. */
   async remove(): Promise<void> {
     this.written = undefined;
-    for (const file of [this.usageFile, this.requestFile, this.launcherFile]) {
+    for (const file of [this.usageFile, this.requestFile, this.claimFile, this.launcherFile]) {
       await fs.rm(file, { force: true }).catch(() => {});
     }
     await fs.rmdir(this.dir).catch(() => {});
