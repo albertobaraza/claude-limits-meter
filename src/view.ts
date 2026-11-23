@@ -90,7 +90,7 @@ export function statusView(
       body = "Loading…";
       break;
     case "noCreds":
-      text = "$(sparkle) —";
+      text = "$(sparkle) no login";
       body =
         "No Claude Code login found on this machine. Sign in to Claude Code first " +
         "(run `claude` in a terminal and authenticate).";
@@ -103,7 +103,7 @@ export function statusView(
         "(not available for the macOS Keychain).";
       break;
     case "rateLimited":
-      text = `$(clock) ${s ? usageText(s.fiveHour, s.sevenDay, showWeekly) : "—"}`;
+      text = `$(clock) ${s ? usageText(s.fiveHour, s.sevenDay, showWeekly) : "…"}`;
       // No countdown: it rounds to whole minutes, so the last minute of a wait read "0m". The footer's Refresh Now link is the button.
       body = "$(clock) Claude is rate limiting requests. The extension will retry automatically.";
       break;
@@ -125,7 +125,7 @@ export function statusView(
     markdown += `\n\n${summaryTable(state.snapshot, now)}\n\n_Last checked ${clockTime(state.snapshot.checkedAt)}_`;
   }
   markdown += `\n\n[Refresh Now](command:${commands.refresh}) · [Settings](command:${commands.openSettings})`;
-  // Only a state whose text shows a reading: "!", "✗", "—" and "…" stand for no number, so they are not coloured.
+  // Only a state whose text shows a reading: "!", "✗", "no login" and "…" stand for no number, so they are not coloured.
   const showsReading = state.status === "ok" || state.status === "rateLimited";
   const warn = showsReading && s !== undefined && (s.fiveHour >= WARN_PCT || s.sevenDay >= WARN_PCT);
   return { text, markdown, warn };
@@ -178,7 +178,7 @@ export function menuEntries(state: State, now = Date.now()): MenuEntry[] {
       });
     }
   } else {
-    entries.push({ label: "$(pulse) Usage", description: state.status === "noCreds" ? "no credentials" : "—" });
+    entries.push({ label: "$(pulse) Usage", description: state.status === "noCreds" ? "no credentials" : "no reading yet" });
   }
   const notice = menuNotice(state);
   if (notice) entries.push(notice);

@@ -32,7 +32,7 @@ test("showWeekly puts the 7-day week next to the 5-hour session in the status-ba
   const both = (state) => statusView(state, COMMANDS, NOW, { showWeekly: true });
   assert.equal(both({ status: "ok", snapshot: SNAPSHOT }).text, "$(sparkle) 5h 42% · 7d 18%");
   assert.equal(both({ status: "rateLimited", snapshot: SNAPSHOT, retryAt: NOW + 1000 }).text, "$(clock) 5h 42% · 7d 18%");
-  assert.equal(both({ status: "rateLimited", retryAt: NOW + 1000 }).text, "$(clock) —", "no reading yet");
+  assert.equal(both({ status: "rateLimited", retryAt: NOW + 1000 }).text, "$(clock) …", "no reading yet");
   assert.equal(both({ status: "ok" }).text, "$(sparkle) 5h 0% · 7d 0%");
   // The states that show a symbol instead of numbers are the same with the setting on.
   for (const status of ["loading", "noCreds", "expired", "error"]) {
@@ -139,7 +139,7 @@ test("loading", () => {
 
 test("noCreds says how to sign in, and shows no old reading", () => {
   const { text, markdown } = view({ status: "noCreds", snapshot: SNAPSHOT });
-  assert.equal(text, "$(sparkle) —");
+  assert.equal(text, "$(sparkle) no login");
   assert.match(markdown, /No Claude Code login found/);
   assert.doesNotMatch(markdown, /\| Session \|/);
 });
@@ -157,7 +157,7 @@ test("rateLimited shows a clock, the last reading, and that the extension retrie
   assert.equal(text, "$(clock) 42%");
   assert.match(markdown, /rate limiting requests\. The extension will retry automatically\./);
   assert.match(markdown, /\| Session \|/);
-  assert.equal(view({ status: "rateLimited", retryAt: NOW + 1000 }).text, "$(clock) —", "no reading yet");
+  assert.equal(view({ status: "rateLimited", retryAt: NOW + 1000 }).text, "$(clock) …", "no reading yet");
 });
 
 test("a rate limit shows no countdown, which read \"0m\" for the last minute of a wait", () => {
@@ -241,7 +241,7 @@ test("the menu lists both windows with bars and reset times, when they were chec
 
 test("the menu with no reading says why, and has no last-checked line", () => {
   assert.equal(menuEntries({ status: "noCreds" }, NOW)[0].description, "no credentials");
-  assert.equal(menuEntries({ status: "loading" }, NOW)[0].description, "—");
+  assert.equal(menuEntries({ status: "loading" }, NOW)[0].description, "no reading yet");
   assert.ok(!menuEntries({ status: "loading" }, NOW).some((e) => e.label.includes("Last checked")));
 });
 

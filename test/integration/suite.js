@@ -106,7 +106,7 @@ const checks = {
   async "with no Claude login the item says so, marked as a development build"() {
     removeLogin(home());
     const item = await checked();
-    assert.equal(item.text, "$(sparkle) — DEV");
+    assert.equal(item.text, "$(sparkle) no login DEV");
     assert.equal(item.backgroundColor, DEV_COLOR);
     assertIn(item.tooltip, "$(beaker) **Development build**", "the tooltip");
     assertIn(item.tooltip, "No Claude Code login found", "the tooltip");

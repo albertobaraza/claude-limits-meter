@@ -148,7 +148,7 @@ const scenarios = {
   async "no login"({ executable, scratch }) {
     await inWindow(executable, scratch, "no-login", async (page) => {
       const item = await statusItem(page);
-      assert.equal((await item.innerText()).trim(), "—", "the item shows a dash");
+      assert.equal((await item.innerText()).trim(), "no login", "the item says there is no login");
       await screenshot(page, "no-login-bar");
 
       const tooltip = await hoverTooltip(page, item, "no-login");
