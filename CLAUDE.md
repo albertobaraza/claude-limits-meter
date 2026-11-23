@@ -129,9 +129,6 @@ a test; the coverage gate in CI fails below the thresholds. There is no linter: 
   `npm publish`): publishing is the user's call. `.claude/settings.json` denies both publishing and `gh pr merge`.
   **Nobody pushes to `main`**: it is reached by merging a pull request (the `no-push-to-main` and
   `no-commit-to-branch` hooks, and `scripts/protect-main.sh` on GitHub once the repo is public).
-- The Claude Code setup (`.claude/`: the skills and `settings.json`) is kept locally and not committed
-  (`.gitignore`), so the paths into it named here and in [CONTRIBUTING.md](CONTRIBUTING.md) are on the
-  owner's machine, not in the repository.
 - **Auto mode**, which the user switches on with `/auto on` and which is on only while the flag file
   named in `.claude/skills/auto/SKILL.md` exists, adds the picking: Claude takes issues by priority
   and works each through to a pull request with green CI. A choice of the user's that can wait goes

@@ -18,7 +18,7 @@ renewal) and [CLAUDE.md](CLAUDE.md) for how the code is organised. To get a clon
 
 ## Commit style
 
-Every commit is a one-liner, using the same convention as the `commit` skill:
+Every commit is a one-liner, using the same convention as the [`commit`](.claude/skills/commit) skill:
 
 ```
 feat: Keychain login read on macOS
@@ -66,8 +66,9 @@ The integration test, the coverage gate and the package check run in CI, not on 
 
 ## Changelog and releases
 
-Run the `changelog` skill on your branch before merging to `main`. It updates [`CHANGELOG.md`](CHANGELOG.md) with a new
-entry, bumps `version` in `package.json` (and the lock file) to match, commits both and pushes.
+Run the `changelog` skill ([`.claude/skills/changelog`](.claude/skills/changelog)) on your branch before merging to
+`main`. It updates [`CHANGELOG.md`](CHANGELOG.md) with a new entry, bumps `version` in `package.json` (and the lock
+file) to match, commits both and pushes.
 
 To do it by hand instead:
 
@@ -99,7 +100,7 @@ listing) by itself. [docs/RELEASING.md](docs/RELEASING.md) has the details and h
 
 ## Pull requests
 
-Open a pull request against `main` using the `pr` skill (or by hand). CI runs automatically:
+Open a pull request against `main` using the [`pr`](.claude/skills/pr) skill (or by hand). CI runs automatically:
 
 - [`test.yaml`](.github/workflows/test.yaml): typecheck and unit tests on Linux, macOS and Windows, the coverage gate,
   the package check, `npm audit`, the integration test in VS Code 1.125.0 and stable, and the UI test of the packaged
@@ -107,7 +108,7 @@ Open a pull request against `main` using the `pr` skill (or by hand). CI runs au
 - [`ci.yml`](.github/workflows/ci.yml): release metadata, commit messages, file hygiene, `actionlint` on the workflows,
   and Gitleaks over the full history.
 
-The `ci` skill reports how those jobs are doing. [Dependabot](.github/dependabot.yml) opens one
+The [`ci`](.claude/skills/ci) skill reports how those jobs are doing. [Dependabot](.github/dependabot.yml) opens one
 weekly PR covering npm and the workflow actions.
 
 ### Title
@@ -149,8 +150,8 @@ committed.
 Claude Code's built-in `/security-review` reads only the pending diff, so it cannot ask how the checks we already have
 combine into a way in. For that this repo carries Cloudflare's
 [`security-audit` skill](https://github.com/cloudflare/security-audit-skill) (MIT) in
-`.claude/skills/security-audit` (in the local Claude Code setup, not in the repository), an unchanged copy pinned to the
-upstream commit named in its `UPSTREAM.md`, which also says how to update it. It tells an agent to
+[`.claude/skills/security-audit`](.claude/skills/security-audit), an unchanged copy pinned to the upstream commit named in
+its [`UPSTREAM.md`](.claude/skills/security-audit/UPSTREAM.md), which also says how to update it. It tells an agent to
 run things, so read what changed upstream before moving the pin. (If the built-in stops with "ambiguous argument
 'origin/HEAD...'", the clone has no remote HEAD: `git remote set-head origin main` sets it, locally and without the network.)
 
@@ -170,11 +171,11 @@ Other extensions and anything else running as the user are not a boundary: they 
 
 | Change | Checklist |
 | --- | --- |
-| The login: reading the credentials file or the Keychain, writing a renewed one back | `DESKTOP-MOBILE-AND-LOCAL-IPC.md` (local-file and credential-store classes) |
-| The requests to Anthropic: the token refresh, the usage call, redirects, what an error or response may carry | `WEB-PROTOCOL-AND-AUTH.md` (token and key exposure; the identity classes mostly do not apply, we are a client) |
-| Workflows, `release.yaml`, trusted publishing, Dependabot, the `.vsix` contents (`.vscodeignore`) | `SUPPLY-CHAIN-AND-RELEASE.md` (CI, release authorization, plugin trust) |
-| The command line: the folder other programs read and leave requests in, the launcher, `src/export.ts` and `src/cli.ts` | `DESKTOP-MOBILE-AND-LOCAL-IPC.md` (local-file and local-IPC classes) |
-| Text from outside shown in the tooltip or menu | `ATTACK-CLASSES.md` (injection); the browser-only classes in `CLIENT-SIDE.md` do not apply |
+| The login: reading the credentials file or the Keychain, writing a renewed one back | [`DESKTOP-MOBILE-AND-LOCAL-IPC.md`](.claude/skills/security-audit/DESKTOP-MOBILE-AND-LOCAL-IPC.md) (local-file and credential-store classes) |
+| The requests to Anthropic: the token refresh, the usage call, redirects, what an error or response may carry | [`WEB-PROTOCOL-AND-AUTH.md`](.claude/skills/security-audit/WEB-PROTOCOL-AND-AUTH.md) (token and key exposure; the identity classes mostly do not apply, we are a client) |
+| Workflows, `release.yaml`, trusted publishing, Dependabot, the `.vsix` contents (`.vscodeignore`) | [`SUPPLY-CHAIN-AND-RELEASE.md`](.claude/skills/security-audit/SUPPLY-CHAIN-AND-RELEASE.md) (CI, release authorization, plugin trust) |
+| The command line: the folder other programs read and leave requests in, the launcher, `src/export.ts` and `src/cli.ts` | [`DESKTOP-MOBILE-AND-LOCAL-IPC.md`](.claude/skills/security-audit/DESKTOP-MOBILE-AND-LOCAL-IPC.md) (local-file and local-IPC classes) |
+| Text from outside shown in the tooltip or menu | [`ATTACK-CLASSES.md`](.claude/skills/security-audit/ATTACK-CLASSES.md) (injection); the browser-only classes in `CLIENT-SIDE.md` do not apply |
 
 Memory safety, the RPC, cloud, AI and data-isolation checklists do not apply here.
 
@@ -243,11 +244,10 @@ A change to the logic comes with a test. Code that needs the `vscode` API stays 
 
 ## Claude Code
 
-The project carries instructions for Claude Code in [CLAUDE.md](CLAUDE.md). Its skills and settings live in `.claude/`,
-which is kept locally and not committed (`.gitignore`): `.claude/skills/` holds `commit`, `pr`, `changelog`, `ci`, `todo`,
-`auto`, `run`, `release` and `security-audit` (see "Security review" above), and `.claude/settings.json` denies Claude
-`gh pr merge` and publishing. `commit`, `changelog` and `pr` push the feature branch themselves (see "Auto mode" above
-for what they never do); a merge, which releases, and publishing stay yours.
+The project carries instructions for Claude Code in [CLAUDE.md](CLAUDE.md) and skills in `.claude/skills/`: `commit`,
+`pr`, `changelog`, `ci`, `todo`, `auto`, `run`, `release` and `security-audit` (see "Security review" above).
+`.claude/settings.json` denies Claude `gh pr merge` and publishing. `commit`, `changelog` and `pr` push the feature
+branch themselves (see "Auto mode" above for what they never do); a merge, which releases, and publishing stay yours.
 
 The `todo` skill keeps a local, untracked `TODO.md` at the repo root as a scratch backlog: it turns the entries into
 GitHub issues (on the "Claude" project board, with a priority) and clears them from the file.
