@@ -24,16 +24,16 @@ Hover the status bar item for both windows one above the other, with how much of
 | --- | --- |
 | `✦ 42%` | Your 5-hour session usage. With `claudeLimitsMeter.showWeekly` on: `✦ 5h 42% · 7d 18%`. |
 | `✦ 91%` in yellow | The 5-hour session or the 7-day week (shown or not) has reached 90%. |
-| `🕒 42%` | Claude asked for a pause. The last reading is shown, and the extension retries by itself. |
+| `🕒 42%` | Claude asked for a pause. The last reading is shown (`🕒 …` before the first one), and the extension retries by itself. |
 | `✦ !` | The stored Claude token has expired. It renews the next time you use Claude Code. |
-| `✦ —` | No Claude Code login found on this machine. |
+| `✦ no login` | No Claude Code login found on this machine. |
 | `✦ ✗` | The check failed; hover for the reason, or see the *Claude Limits Meter* channel in the Output panel. The last reading is kept in the hover. |
 | `✦ …` | The first check is running. Refresh Now shows a spinning icon the same way. |
 
 ## Requirements and platforms
 
 - VS Code 1.125 or later.
-- Signed in to [Claude Code](https://code.claude.com) with a Claude account, the kind that has the 5-hour and weekly limits. With only an API key there is no login to read, and the item shows `—`.
+- Signed in to [Claude Code](https://code.claude.com) with a Claude account, the kind that has the 5-hour and weekly limits. With only an API key there is no login to read, and the item shows `✦ no login`.
 - A trusted workspace: the extension does not run in Restricted Mode, because it reads your login and sends it to Anthropic.
 
 The extension runs where your Claude Code login lives (`extensionKind: workspace`), so it works in Remote-SSH, WSL and dev containers as long as you are signed in to Claude Code **on that host**.

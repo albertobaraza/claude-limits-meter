@@ -152,7 +152,7 @@ grouped by their Priority field from the project board
 (`gh project item-list <board> --owner <board-owner> --format json --limit 200`, matched by
 `content.number` among this repo's items, as in step 2). Use a two-level list: the top level is a
 `###` heading per priority, ordered `Urgent`, `High`, `Medium`, `Low`, then a final `### No
-priority` section for issues with no Priority value (or not on the board at all) — always last,
+priority` section for issues with no Priority value (or not on the board at all), always last,
 regardless of how many issues fall there. Within each section, sort by issue number, in exactly this
 shape, with the issue number as a markdown link to the issue and no separate URL line:
 

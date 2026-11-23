@@ -24,8 +24,8 @@ Run:
 gh pr list --head <current-branch> --state open --json number,url,title
 ```
 
-If one is already open for this branch, note its actual link — the `url` field from the JSON
-output, not just the PR number — and continue through Steps 3–7 to redraft the body from the
+If one is already open for this branch, note its actual link (the `url` field from the JSON
+output, not just the PR number) and continue through Steps 3–7 to redraft the body from the
 full commit range: commits may have landed since the PR was opened, and this is the skill's
 chance to catch a body that went stale. Step 8 updates that existing PR instead of
 creating a duplicate.
@@ -118,7 +118,7 @@ git branch --show-current
   ```bash
   gh issue view <N> --json number,state,title
   ```
-  If it resolves, carry `<N>` into Step 7 — the PR body will open with `Resolves #<N>`. If the
+  If it resolves, carry `<N>` into Step 7: the PR body will open with `Resolves #<N>`. If the
   lookup fails (deleted issue, typo, or the number actually belongs to a PR rather than an
   issue), treat it exactly like no issue was found: skip linking silently. Never guess or fall
   back to a nearby issue number.
@@ -143,10 +143,10 @@ Resolves #<N>
 ```
 
 Rules:
-- Only ever include a `Resolves #<N>` line when Step 6 confirmed that issue exists — never add one
+- Only ever include a `Resolves #<N>` line when Step 6 confirmed that issue exists. Never add one
   speculatively, and never add more than the one issue Step 6 found.
 - Reflect the **net effect** of the branch, the same way the `changelog` skill filters out intra-branch noise (a commit that only fixes a mistake introduced earlier in this same branch doesn't need its own bullet).
-- The test plan is manual-verification only. Leave out anything already covered by a CI job (lint, typecheck, tests, the checks listed under CI/CD in this repo's CLAUDE.md) — reviewers can already see those pass on the PR. Only list checks that need a human, like exercising the feature that changed.
+- The test plan is manual-verification only. Leave out anything already covered by a CI job (lint, typecheck, tests, the checks listed under CI/CD in this repo's CLAUDE.md): reviewers can already see those pass on the PR. Only list checks that need a human, like exercising the feature that changed.
 - No fluff, no restating commit hashes, no "this PR".
 - **Do not** add a "Generated with Claude Code" footer, a Co-Authored-By line, or any AI-attribution text. This repo's `commit` skill forbids the same, and it applies here too.
 
@@ -180,5 +180,5 @@ Either way, report the PR's URL.
 - The only reasons to stop are the `commit` skill's anomalies, Step 5's, or `gh auth status` failing: tell the user rather than working around it.
 - Step 5 is the only place this skill starts another one. It runs `changelog` because CI would fail without it, not on every pull request: a branch that changes nothing CI watches gets no release entry from here.
 - The `Resolves #<N>` auto-link (Step 6) only fires off a confirmed-existing issue parsed from the
-  branch name — it never fabricates or guesses a number. Refreshing an open PR's body (Step 8)
+  branch name; it never fabricates or guesses a number. Refreshing an open PR's body (Step 8)
   redrafts it the same way, so a `Resolves #<N>` line is kept or added under the same rule.

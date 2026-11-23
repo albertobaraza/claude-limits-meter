@@ -27,7 +27,7 @@ Run the following to get all commits on this branch not yet on `<base>`:
 git log <base>..HEAD --oneline
 ```
 
-If the output is empty, stop and tell the user there are no commits ahead of `<base>` — nothing to release.
+If the output is empty, stop and tell the user there are no commits ahead of `<base>`: nothing to release.
 
 ### Step 3 – Infer the version bump type
 
@@ -39,12 +39,12 @@ git log <base>..HEAD --pretty=format:"%s%n%b"
 
 **First, filter out intra-branch noise.** Before deciding the bump type or drafting bullets, identify commits that have no net effect on `<base>`:
 
-- A commit that fixes a mistake introduced by an earlier commit *on this same branch* (e.g. "fix path added in previous commit", "add missing import forgotten earlier", "fix CI variable introduced in this branch"). Both the original mistake and its fix cancel out — omit both from the changelog and do not let them influence the bump type.
-- A feature that was added and then fully reverted within the branch — omit both.
+- A commit that fixes a mistake introduced by an earlier commit *on this same branch* (e.g. "fix path added in previous commit", "add missing import forgotten earlier", "fix CI variable introduced in this branch"). Both the original mistake and its fix cancel out: omit both from the changelog and do not let them influence the bump type.
+- A feature that was added and then fully reverted within the branch: omit both.
 - Use the commit message wording and the diff context to judge: if a `fix:` commit's diff only touches code that didn't exist on `<base>` before this branch, it is intra-branch noise.
 
 Also exclude this branch's own prior `chore: bump version to ... and update CHANGELOG` commit(s),
-if any — see Step 4. That commit is this skill's own previous output, not a new change, so it
+if any (see Step 4). That commit is this skill's own previous output, not a new change, so it
 must not influence the bump type or appear in the drafted bullets.
 
 Only the **net changes** relative to `<base>` determine the bump type and the changelog content.
@@ -61,7 +61,7 @@ When in doubt, default to **patch**.
 
 ### Step 4 – Read the baseline version and detect a prior in-branch release
 
-Always read the baseline version from `<base>`, not the working tree — the working tree may
+Always read the baseline version from `<base>`, not the working tree: the working tree may
 already carry an unreleased bump from an earlier run of this skill on the same branch:
 
 ```bash
@@ -75,11 +75,11 @@ git diff <base>...HEAD -- CHANGELOG.md
 ```
 
 - **No diff, or the diff doesn't touch the topmost `## [` entry**: first run on this branch.
-  Proceed normally — Step 6 inserts a brand new entry above whatever is currently topmost.
+  Proceed normally: Step 6 inserts a brand new entry above whatever is currently topmost.
 - **The topmost `## [` entry in the working tree doesn't exist in `<base>`'s CHANGELOG.md**: this
   skill already ran on this branch, and that entry is still unreleased (only on this branch, not
   yet on `<base>`). Do not stack a second version bump on top of it. Instead, Step 6 replaces that
-  entry in place, using the bump type computed from **all** net changes since `<base>` (Step 3) —
+  entry in place, using the bump type computed from **all** net changes since `<base>` (Step 3),
   not just the changes made since the prior run.
 
 Compute the new version by applying the bump from Step 3 to `<base>`'s version (never to whatever
@@ -91,8 +91,8 @@ version is currently in the working tree's `<version-file>`):
 ### Step 5 – Draft and apply the changelog entry
 
 The changelog follows two standards:
-- **[Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)** — entry structure, section names, and writing style
-- **[Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)** — version bump rules
+- **[Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)**: entry structure, section names, and writing style
+- **[Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)**: version bump rules
 
 Read the existing `CHANGELOG.md` to match the established writing style.
 
@@ -100,19 +100,19 @@ Use today's date (from the `currentDate` context or `date +%Y-%m-%d`) for the en
 
 Draft the new entry based on the **net changes** identified in Step 3. Rules:
 - Only include sections (`### Added`, `### Changed`, `### Fixed`, `### Removed`) that have at least one bullet.
-- Write bullets in the same terse style as existing entries — no fluff, no "this commit", no author names.
-- Describe each change by its effect, not the mechanics of how it was implemented — this is
+- Write bullets in the same terse style as existing entries: no fluff, no "this commit", no author names.
+- Describe each change by its effect, not the mechanics of how it was implemented. This is
   about phrasing, not exclusion: every net change belongs, including an internal-only fix, as
   long as it actually affects behavior (per SemVer, a "bug fix" is by definition an internal
   change that fixes incorrect behavior).
 - Omit any changelog, version bump, or docs-only commits from the bullet list.
-- Omit intra-branch noise identified in Step 3 — these have no impact on `<base>` and do not belong in the changelog.
+- Omit intra-branch noise identified in Step 3: these have no impact on `<base>` and do not belong in the changelog.
 
 ### Step 6 – Update CHANGELOG.md
 
 - **First run** (per Step 4): insert the new entry directly after the `# Changelog` header block
   (after the preamble lines that end before the first `## [` entry).
-- **Re-run** (per Step 4): replace the existing topmost `## [` entry — heading and body — with the
+- **Re-run** (per Step 4): replace the existing topmost `## [` entry (heading and body) with the
   freshly drafted one, in place, leaving exactly one heading with no stale entry left behind.
 
 The entry format is:
@@ -194,11 +194,11 @@ git commit -m "chore: bump version to X.Y.Z and update CHANGELOG"
 Push the branch as in the `commit` skill's step 6; its limits and anomalies apply.
 
 Tell the user the commit was created and pushed, show the changelog entry that was written (and the public entries,
-or that the release had nothing for a user), and confirm the branch is ready to merge. On a re-run (per Step 4), this creates a new commit whose content supersedes the prior changelog commit's — that's expected, never amend the old one (see below).
+or that the release had nothing for a user), and confirm the branch is ready to merge. On a re-run (per Step 4), this creates a new commit whose content supersedes the prior changelog commit's. That's expected; never amend the old one (see below).
 
 ## Error handling
 
 - If `<version-file>` is not found, tell the user and stop.
 - If `CHANGELOG.md` is not found, offer to create it with a standard header before proceeding.
 - If a `<public-notes>` file is not found, tell the user and stop: Step 7 has nowhere to write.
-- Never amend existing commits — always create a new one.
+- Never amend existing commits; always create a new one.
