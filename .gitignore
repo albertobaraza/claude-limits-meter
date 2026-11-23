@@ -18,6 +18,3 @@ out/
 
 # Auto mode's run reports (see the `auto` skill): local, never committed.
 uncommitted/
-
-# The Claude Code setup (skills, settings) is kept locally and not committed.
-/.claude/

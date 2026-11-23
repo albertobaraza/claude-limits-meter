@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": ["Bash(gh issue close:*)"],
+    "deny": [
+      "Bash(gh pr merge:*)",
+      "Bash(npm publish:*)",
+      "Bash(npx vsce publish:*)",
+      "Bash(npx @vscode/vsce publish:*)",
+      "Bash(vsce publish:*)",
+      "Read(./.env)",
+      "Grep(./.env)"
+    ]
+  }
+}
