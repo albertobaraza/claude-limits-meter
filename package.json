@@ -83,7 +83,12 @@
         "claudeLimitsMeter.showWeekly": {
           "type": "boolean",
           "default": false,
-          "description": "Show the 7-day weekly usage next to the 5-hour session in the status bar (for example \"5h 42% · 7d 18%\"). Off shows the 5-hour session alone."
+          "description": "Show the 7-day weekly usage next to the 5-hour session in the status bar, a watch icon marking the session and a calendar icon the week. Off shows the 5-hour session alone."
+        },
+        "claudeLimitsMeter.showResetTime": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Show how long until each window in the status bar resets, after its usage (for example \"42% (2h 13m)\", and with `#claudeLimitsMeter.showWeekly#` on, the week's after it as \"18% (4d 2h)\"). It counts down once a minute. Off shows the usage alone."
         },
         "claudeLimitsMeter.refreshExpiredToken": {
           "type": "boolean",

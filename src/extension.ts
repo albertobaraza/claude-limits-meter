@@ -145,10 +145,14 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
   // ── rendering ──
   function render() {
     const commands = { refresh: CMD_REFRESH, openSettings: CMD_OPEN_SETTINGS };
-    const plain = statusView(state, commands, Date.now(), { showWeekly: cfg().get<boolean>("showWeekly", false) });
+    const plain = statusView(state, commands, Date.now(), {
+      showWeekly: cfg().get<boolean>("showWeekly", false),
+      showResetTime: cfg().get<boolean>("showResetTime", false),
+    });
     const view = dev ? devView(plain) : plain;
     item.text = view.text;
     item.color = view.warn ? new vscode.ThemeColor("terminal.ansiYellow") : undefined;
+    item.accessibilityInformation = { label: view.accessibility };
     if (view.markdown === shownTooltip) return;
     shownTooltip = view.markdown;
     const tooltip = new vscode.MarkdownString(view.markdown, true);
@@ -319,7 +323,7 @@ export function activate(context: vscode.ExtensionContext): TestApi | undefined 
     }),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration(`${SETTINGS}.pollIntervalSeconds`)) schedule();
-      if (e.affectsConfiguration(`${SETTINGS}.showWeekly`)) render();
+      if (e.affectsConfiguration(`${SETTINGS}.showWeekly`) || e.affectsConfiguration(`${SETTINGS}.showResetTime`)) render();
       if (e.affectsConfiguration(`${SETTINGS}.commandLine`)) void applyCommandLine();
       if (e.affectsConfiguration(`${SETTINGS}.refreshExpiredToken`)) {
         // Only the user's own value counts (see userOnly): a repository rewriting its settings file is not a reason to check.
