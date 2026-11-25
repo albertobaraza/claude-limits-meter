@@ -22,7 +22,7 @@ Hover the status bar item for both windows one above the other, with how much of
 
 | Status bar | Meaning |
 | --- | --- |
-| `✦ 42%` | Your 5-hour session usage. With `claudeLimitsMeter.showWeekly` on: `✦ 5h 42% · 7d 18%`. |
+| `✦ 42%` | Your 5-hour session usage. With `claudeLimitsMeter.showWeekly` on: `✦ ⌚ 42% · 📅 18%`, a watch icon for the session and a calendar for the week (the hover and the click menu mark their rows the same way). With `claudeLimitsMeter.showResetTime` on, each window is followed by the time until it resets: `✦ 42% (2h 13m)`, or with both on `✦ ⌚ 42% (2h 13m) · 📅 18% (4d 2h)`. |
 | `✦ 91%` in yellow | The 5-hour session or the 7-day week (shown or not) has reached 90%. |
 | `🕒 42%` | Claude asked for a pause. The last reading is shown (`🕒 …` before the first one), and the extension retries by itself. |
 | `✦ !` | The stored Claude token has expired. It renews the next time you use Claude Code. |
@@ -59,7 +59,8 @@ If you would rather renew from here, turn on **`claudeLimitsMeter.refreshExpired
 | Setting | Default | |
 | --- | --- | --- |
 | `claudeLimitsMeter.pollIntervalSeconds` | `60` | Seconds between checks (60 to 86400; a value outside that is clamped, and anything that is not a number means 60). Checks are skipped while the window is unfocused. |
-| `claudeLimitsMeter.showWeekly` | `false` | Show the 7-day weekly usage next to the 5-hour session in the status bar (`5h 42% · 7d 18%`). Off shows the 5-hour session alone. |
+| `claudeLimitsMeter.showWeekly` | `false` | Show the 7-day weekly usage next to the 5-hour session in the status bar, a watch icon marking the session and a calendar the week (`⌚ 42% · 📅 18%`). Off shows the 5-hour session alone. |
+| `claudeLimitsMeter.showResetTime` | `false` | Show the time until each window in the status bar resets, after its usage (`42% (2h 13m)`, or with `showWeekly` on `⌚ 42% (2h 13m) · 📅 18% (4d 2h)`). It counts down once a minute. Off shows the usage alone. |
 | `claudeLimitsMeter.refreshExpiredToken` | `false` | See above. Read from your User settings only: a workspace's `.vscode/settings.json` cannot switch it on. |
 | `claudeLimitsMeter.clientId` | `""` | OAuth client id for the option above; empty means auto-detect. User settings only, like the option above. |
 | `claudeLimitsMeter.commandLine` | `false` | Lets scripts and coding agents read your usage; see [From scripts and coding agents](#from-scripts-and-coding-agents). User settings only, like the two above. |
