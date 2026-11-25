@@ -15,6 +15,14 @@ export const WARN_PCT = 90;
  */
 export const USAGE_PAGE_URL = "https://claude.ai/settings/usage";
 
+/**
+ * The codicons that stand for the two windows wherever VS Code draws them: in the status-bar text instead of "5h" and "7d", and
+ * on the hover's and the menu's rows, so the menu's "Session (5h)" and "Weekly (7d)" say what they mean. Not `$(clock)`: that
+ * is the rate limit's.
+ */
+export const SESSION_ICON = "$(watch)";
+export const WEEK_ICON = "$(calendar)";
+
 export interface StatusView {
   /** Status-bar text; may contain $(codicon) markers. */
   text: string;
@@ -25,11 +33,15 @@ export interface StatusView {
   warn: boolean;
   /** Hover tooltip: a short summary, as Markdown with command links. */
   markdown: string;
+  /** What a screen reader says for the item: the text in words, since the icons that label the windows are not read. */
+  accessibility: string;
 }
 
 export interface ViewOptions {
   /** Show the 7-day week next to the 5-hour session in the status-bar text (the `showWeekly` setting). */
   showWeekly?: boolean;
+  /** Show how long until each window in the status-bar text resets, after its usage (the `showResetTime` setting). */
+  showResetTime?: boolean;
 }
 
 export interface MenuEntry {
@@ -50,7 +62,7 @@ export interface Commands {
 
 /**
  * The hover's summary of the two windows: one row each, in a table so the columns line up, with how much is used and how long
- * until it resets. The bars, and the "(5h)" and "(7d)", are only in the click menu. The table has no header text (Markdown
+ * until it resets, each row starting with its window's icon. The bars, and the "(5h)" and "(7d)", are only in the click menu. The table has no header text (Markdown
  * wants a header row, so it is an empty one, which takes no visible room). The "·" between the columns are columns of their own:
  * in the cell of a right-aligned percentage a dot would move with the number of digits, in a column it stays in line.
  * Everything in it is a number or a duration, never text from outside.
@@ -59,15 +71,57 @@ function summaryTable(s: Snapshot, now: number): string {
   return [
     "| | | | | |",
     "| :-- | :-: | --: | :-: | :-- |",
-    `| Session | · | **${pctText(s.fiveHour).trim()}** | · | ${timeLeft(s.fiveHourReset, now)} |`,
-    `| Weekly | · | **${pctText(s.sevenDay).trim()}** | · | ${timeLeft(s.sevenDayReset, now)} |`,
+    `| ${SESSION_ICON} Session | · | **${pctText(s.fiveHour).trim()}** | · | ${timeLeft(s.fiveHourReset, now)} |`,
+    `| ${WEEK_ICON} Weekly | · | **${pctText(s.sevenDay).trim()}** | · | ${timeLeft(s.sevenDayReset, now)} |`,
   ].join("\n");
 }
 
-/** The numbers in the status-bar text: the 5-hour session alone, or labelled next to the 7-day week. */
-function usageText(fiveHour: number, sevenDay: number, showWeekly: boolean): string {
-  const five = `${Math.trunc(fiveHour)}%`;
-  return showWeekly ? `5h ${five} · 7d ${Math.trunc(sevenDay)}%` : five;
+/**
+ * The numbers in the status-bar text: the 5-hour session alone, or next to the 7-day week with each marked by its icon
+ * (SESSION_ICON, WEEK_ICON), each followed by the time
+ * until it resets when `showResetTime` is on ("42% (2h 13m)"). A reset time the reading did not give, or could not be read, is
+ * left out rather than shown as "(?)": the hover still says "?". It counts down with the extension's once-a-minute render.
+ */
+function usageText(s: Partial<Snapshot>, now: number, { showWeekly = false, showResetTime = false }: ViewOptions): string {
+  const one = (pct: number | undefined, reset: string | null | undefined) => {
+    const left = showResetTime ? timeLeft(reset, now) : undefined;
+    return `${Math.trunc(pct ?? 0)}%${left && left !== "?" ? ` (${left})` : ""}`;
+  };
+  const five = one(s.fiveHour, s.fiveHourReset);
+  return showWeekly ? `${SESSION_ICON} ${five} · ${WEEK_ICON} ${one(s.sevenDay, s.sevenDayReset)}` : five;
+}
+
+/**
+ * The reading in words for a screen reader: both windows, whatever the text shows, with how long until each resets. The
+ * numbers are the text's (truncated), and a reading not yet taken is 0% as in the text.
+ */
+function readingInWords(s: Partial<Snapshot>, now: number): string {
+  const resets = (reset: string | null | undefined) => {
+    const left = timeLeft(reset, now);
+    return left === "?" ? "reset time unknown" : left === "now" ? "resets now" : `resets in ${left}`;
+  };
+  return (
+    `session ${Math.trunc(s.fiveHour ?? 0)}%, ${resets(s.fiveHourReset)}; ` +
+    `week ${Math.trunc(s.sevenDay ?? 0)}%, ${resets(s.sevenDayReset)}`
+  );
+}
+
+function accessibilityLabel(state: State, now: number): string {
+  const s = state.snapshot;
+  switch (state.status) {
+    case "loading":
+      return "Claude usage: loading";
+    case "noCreds":
+      return "Claude usage: no Claude Code login found";
+    case "expired":
+      return "Claude usage: the stored token has expired";
+    case "rateLimited":
+      return `Claude usage, rate limited, retrying automatically: ${s ? readingInWords(s, now) : "no reading yet"}`;
+    case "error":
+      return "Claude usage: the check failed, hover for the reason";
+    case "ok":
+      return `Claude usage: ${readingInWords(s ?? {}, now)}`;
+  }
 }
 
 /** Text for the trusted tooltip: one line (a newline could start a fence, a heading or a list) with every Markdown mark escaped. */
@@ -79,7 +133,7 @@ export function statusView(
   state: State,
   commands: Commands,
   now = Date.now(),
-  { showWeekly = false }: ViewOptions = {},
+  options: ViewOptions = {},
 ): StatusView {
   const s = state.snapshot;
   let text: string;
@@ -103,7 +157,7 @@ export function statusView(
         "(not available for the macOS Keychain).";
       break;
     case "rateLimited":
-      text = `$(clock) ${s ? usageText(s.fiveHour, s.sevenDay, showWeekly) : "…"}`;
+      text = `$(clock) ${s ? usageText(s, now, options) : "…"}`;
       // No countdown: it rounds to whole minutes, so the last minute of a wait read "0m". The footer's Refresh Now link is the button.
       body = "$(clock) Claude is rate limiting requests. The extension will retry automatically.";
       break;
@@ -112,7 +166,7 @@ export function statusView(
       body = `$(error) ${escapeMarkdown(state.error ?? "Unknown error")}`;
       break;
     case "ok":
-      text = `$(sparkle) ${usageText(s?.fiveHour ?? 0, s?.sevenDay ?? 0, showWeekly)}`;
+      text = `$(sparkle) ${usageText(s ?? {}, now, options)}`;
       body = "";
       break;
   }
@@ -128,7 +182,7 @@ export function statusView(
   // Only a state whose text shows a reading: "!", "✗", "no login" and "…" stand for no number, so they are not coloured.
   const showsReading = state.status === "ok" || state.status === "rateLimited";
   const warn = showsReading && s !== undefined && (s.fiveHour >= WARN_PCT || s.sevenDay >= WARN_PCT);
-  return { text, markdown, warn };
+  return { text, markdown, warn, accessibility: accessibilityLabel(state, now) };
 }
 
 /** The view of a development build (F5 or a test host), marked so it is not mistaken for the installed extension. */
@@ -137,6 +191,7 @@ export function devView(view: StatusView): StatusView {
     ...view,
     text: `${view.text} DEV`,
     markdown: `$(beaker) **Development build**, not the installed extension\n\n${view.markdown}`,
+    accessibility: `Development build. ${view.accessibility}`,
   };
 }
 
@@ -169,11 +224,11 @@ export function menuEntries(state: State, now = Date.now()): MenuEntry[] {
   const s = state.snapshot;
   if (s) {
     for (const w of [
-      { label: "Session (5h)", pct: s.fiveHour, reset: s.fiveHourReset },
-      { label: "Weekly (7d)", pct: s.sevenDay, reset: s.sevenDayReset },
+      { label: `${SESSION_ICON} Session (5h)`, pct: s.fiveHour, reset: s.fiveHourReset },
+      { label: `${WEEK_ICON} Weekly (7d)`, pct: s.sevenDay, reset: s.sevenDayReset },
     ]) {
       entries.push({
-        label: `$(pulse) ${w.label}`,
+        label: w.label,
         description: `${bar(w.pct)} ${pctText(w.pct).trim()}   ⏱ ${timeLeft(w.reset, now)}`,
       });
     }

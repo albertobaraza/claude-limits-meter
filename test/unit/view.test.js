@@ -1,7 +1,17 @@
 // What each state looks like (src/view.ts): status-bar text, tooltip Markdown and the click menu.
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { statusView, menuEntries, devView, escapeMarkdown, SETTINGS, WARN_PCT, USAGE_PAGE_URL } = require("../../out/view.js");
+const {
+  statusView,
+  menuEntries,
+  devView,
+  escapeMarkdown,
+  SETTINGS,
+  WARN_PCT,
+  USAGE_PAGE_URL,
+  SESSION_ICON,
+  WEEK_ICON,
+} = require("../../out/view.js");
 
 const NOW = Date.parse("2026-01-01T00:00:00Z");
 const COMMANDS = { refresh: "ext.refresh", openSettings: "ext.openSettings" };
@@ -30,10 +40,10 @@ test("ok shows the 5-hour percentage, truncated, in the status bar", () => {
 
 test("showWeekly puts the 7-day week next to the 5-hour session in the status-bar text", () => {
   const both = (state) => statusView(state, COMMANDS, NOW, { showWeekly: true });
-  assert.equal(both({ status: "ok", snapshot: SNAPSHOT }).text, "$(sparkle) 5h 42% · 7d 18%");
-  assert.equal(both({ status: "rateLimited", snapshot: SNAPSHOT, retryAt: NOW + 1000 }).text, "$(clock) 5h 42% · 7d 18%");
+  assert.equal(both({ status: "ok", snapshot: SNAPSHOT }).text, "$(sparkle) $(watch) 42% · $(calendar) 18%");
+  assert.equal(both({ status: "rateLimited", snapshot: SNAPSHOT, retryAt: NOW + 1000 }).text, "$(clock) $(watch) 42% · $(calendar) 18%");
   assert.equal(both({ status: "rateLimited", retryAt: NOW + 1000 }).text, "$(clock) …", "no reading yet");
-  assert.equal(both({ status: "ok" }).text, "$(sparkle) 5h 0% · 7d 0%");
+  assert.equal(both({ status: "ok" }).text, "$(sparkle) $(watch) 0% · $(calendar) 0%");
   // The states that show a symbol instead of numbers are the same with the setting on.
   for (const status of ["loading", "noCreds", "expired", "error"]) {
     const state = { status, snapshot: SNAPSHOT, error: "x" };
@@ -43,6 +53,77 @@ test("showWeekly puts the 7-day week next to the 5-hour session in the status-ba
   assert.equal(statusView({ status: "ok", snapshot: SNAPSHOT }, COMMANDS, NOW, {}).text, "$(sparkle) 42%");
   assert.equal(statusView({ status: "ok", snapshot: SNAPSHOT }, COMMANDS, NOW, { showWeekly: false }).text, "$(sparkle) 42%");
   assert.equal(both({ status: "ok", snapshot: SNAPSHOT }).markdown, view({ status: "ok", snapshot: SNAPSHOT }).markdown);
+});
+
+test("showResetTime puts the time until each shown window resets after its usage, alone or with showWeekly", () => {
+  const ok = { status: "ok", snapshot: SNAPSHOT };
+  const text = (state, options, now = NOW) => statusView(state, COMMANDS, now, options).text;
+  assert.equal(text(ok, { showResetTime: true }), "$(sparkle) 42% (2h 13m)");
+  assert.equal(text(ok, { showResetTime: true, showWeekly: true }), "$(sparkle) $(watch) 42% (2h 13m) · $(calendar) 18% (4d 2h)");
+  assert.equal(text(ok, { showResetTime: false, showWeekly: true }), "$(sparkle) $(watch) 42% · $(calendar) 18%", "the week alone");
+  assert.equal(text(ok, { showResetTime: false }), "$(sparkle) 42%");
+  // It counts down with the clock it is given (the extension re-renders once a minute), down to "now" once the reset has passed.
+  assert.equal(text(ok, { showResetTime: true }, NOW + 2 * 60 * 60_000), "$(sparkle) 42% (13m)");
+  assert.equal(text(ok, { showResetTime: true }, NOW + 3 * 60 * 60_000), "$(sparkle) 42% (now)");
+  // A rate limit still shows the last reading, with its reset time.
+  const limited = { status: "rateLimited", snapshot: SNAPSHOT, retryAt: NOW + 1000 };
+  assert.equal(text(limited, { showResetTime: true, showWeekly: true }), "$(clock) $(watch) 42% (2h 13m) · $(calendar) 18% (4d 2h)");
+  assert.equal(text({ status: "rateLimited", retryAt: NOW + 1000 }, { showResetTime: true }), "$(clock) …", "no reading yet");
+  // A reset time missing or unreadable is left out of the bar (the hover says "?"), and so is a missing reading's.
+  const noReset = { status: "ok", snapshot: { ...SNAPSHOT, fiveHourReset: null, sevenDayReset: "not a date" } };
+  assert.equal(text(noReset, { showResetTime: true, showWeekly: true }), "$(sparkle) $(watch) 42% · $(calendar) 18%");
+  assert.equal(text({ status: "ok", snapshot: { ...SNAPSHOT, fiveHourReset: undefined } }, { showResetTime: true }), "$(sparkle) 42%");
+  assert.equal(text({ status: "ok" }, { showResetTime: true, showWeekly: true }), "$(sparkle) $(watch) 0% · $(calendar) 0%");
+  // The states that show a symbol instead of numbers, and the hover, are the same with the setting on.
+  for (const status of ["loading", "noCreds", "expired", "error"]) {
+    const state = { status, snapshot: SNAPSHOT, error: "x" };
+    assert.equal(text(state, { showResetTime: true, showWeekly: true }), view(state).text, status);
+  }
+  assert.equal(statusView(ok, COMMANDS, NOW, { showResetTime: true }).markdown, view(ok).markdown);
+  assert.equal(statusView(ok, COMMANDS, NOW, { showResetTime: true }).warn, view(ok).warn);
+});
+
+test("the two windows are marked by codicons, not by \"5h\" and \"7d\", and never by the rate limit's clock", () => {
+  assert.equal(SESSION_ICON, "$(watch)");
+  assert.equal(WEEK_ICON, "$(calendar)");
+  assert.notEqual(SESSION_ICON, "$(clock)");
+  assert.notEqual(WEEK_ICON, "$(clock)");
+  const ok = { status: "ok", snapshot: SNAPSHOT };
+  const { markdown } = view(ok);
+  assert.match(markdown, /\| \$\(watch\) Session \|/);
+  assert.match(markdown, /\| \$\(calendar\) Weekly \|/);
+  const [session, week] = menuEntries(ok, NOW);
+  assert.equal(session.label, "$(watch) Session (5h)", "the menu says what the icon means");
+  assert.equal(week.label, "$(calendar) Weekly (7d)");
+});
+
+test("a screen reader hears the reading in words, both windows and their resets, whatever the text shows", () => {
+  const label = (state, options, now = NOW) => statusView(state, COMMANDS, now, options).accessibility;
+  const ok = { status: "ok", snapshot: SNAPSHOT };
+  const words = "session 42%, resets in 2h 13m; week 18%, resets in 4d 2h";
+  for (const options of [{}, { showWeekly: true }, { showResetTime: true }, { showWeekly: true, showResetTime: true }]) {
+    assert.equal(label(ok, options), `Claude usage: ${words}`, JSON.stringify(options));
+  }
+  assert.equal(
+    label({ status: "rateLimited", snapshot: SNAPSHOT, retryAt: NOW + 1000 }),
+    `Claude usage, rate limited, retrying automatically: ${words}`,
+  );
+  assert.equal(
+    label({ status: "rateLimited", retryAt: NOW + 1000 }),
+    "Claude usage, rate limited, retrying automatically: no reading yet",
+  );
+  assert.equal(
+    label({ status: "ok", snapshot: { ...SNAPSHOT, fiveHourReset: null, sevenDayReset: "not a date" } }),
+    "Claude usage: session 42%, reset time unknown; week 18%, reset time unknown",
+  );
+  assert.equal(label(ok, {}, Date.parse("2026-01-01T02:13:00Z")), "Claude usage: session 42%, resets now; week 18%, resets in 3d 23h");
+  assert.equal(label({ status: "ok" }), "Claude usage: session 0%, reset time unknown; week 0%, reset time unknown");
+  assert.equal(label({ status: "loading" }), "Claude usage: loading");
+  assert.equal(label({ status: "noCreds" }), "Claude usage: no Claude Code login found");
+  assert.equal(label({ status: "expired", snapshot: SNAPSHOT }), "Claude usage: the stored token has expired");
+  // The error's own text is in the hover, not read out with the item.
+  assert.equal(label({ status: "error", snapshot: SNAPSHOT, error: "secret-ish detail" }), "Claude usage: the check failed, hover for the reason");
+  assert.equal(devView(view(ok)).accessibility, `Development build. Claude usage: ${words}`);
 });
 
 test("the text is flagged to turn yellow from 90% in the 5-hour session or in the 7-day week", () => {
@@ -77,8 +158,8 @@ test("the hover lists both windows one above the other, each with its usage and 
   assert.deepEqual(table, [
     "| | | | | |",
     "| :-- | :-: | --: | :-: | :-- |",
-    "| Session | · | **42%** | · | 2h 13m |",
-    "| Weekly | · | **18%** | · | 4d 2h |",
+    "| $(watch) Session | · | **42%** | · | 2h 13m |",
+    "| $(calendar) Weekly | · | **18%** | · | 4d 2h |",
   ]);
   assert.doesNotMatch(markdown, /\(5h\)|\(7d\)|Used|Resets/, "no header and no window lengths: they are in the click menu");
   assert.match(markdown, /_Last checked 14:32_/);
@@ -98,19 +179,19 @@ test("the hover's table is a real one: the same number of columns in every row, 
 test("the hover counts down to each reset from the time it is drawn, so drawing it again later shows less", () => {
   const state = { status: "ok", snapshot: SNAPSHOT };
   const at = (now) => statusView(state, COMMANDS, now).markdown;
-  assert.match(at(NOW), /\| Session \| · \| \*\*42%\*\* \| · \| 2h 13m \|/);
-  assert.match(at(NOW + 60_000), /\| Session \| · \| \*\*42%\*\* \| · \| 2h 12m \|/);
-  assert.match(at(NOW + 60 * 60_000), /\| Weekly \| · \| \*\*18%\*\* \| · \| 4d 1h \|/);
+  assert.match(at(NOW), /\| \$\(watch\) Session \| · \| \*\*42%\*\* \| · \| 2h 13m \|/);
+  assert.match(at(NOW + 60_000), /\| \$\(watch\) Session \| · \| \*\*42%\*\* \| · \| 2h 12m \|/);
+  assert.match(at(NOW + 60 * 60_000), /\| \$\(calendar\) Weekly \| · \| \*\*18%\*\* \| · \| 4d 1h \|/);
   assert.notEqual(at(NOW), at(NOW + 60_000), "a redraw a minute later is not the same text");
   assert.equal(at(NOW), at(NOW), "and a redraw at once is, which lets the item leave an open hover alone");
 });
 
 test("a window whose reset has passed or is unknown says so in the hover, and the usage still shows", () => {
   const hover = (snapshot, now = NOW) => statusView({ status: "ok", snapshot }, COMMANDS, now).markdown;
-  assert.match(hover(SNAPSHOT, Date.parse("2026-01-01T02:13:00Z")), /\| Session \| · \| \*\*42%\*\* \| · \| now \|/);
-  assert.match(hover({ ...SNAPSHOT, fiveHourReset: null }), /\| Session \| · \| \*\*42%\*\* \| · \| \? \|/);
-  assert.match(hover({ ...SNAPSHOT, sevenDayReset: undefined }), /\| Weekly \| · \| \*\*18%\*\* \| · \| \? \|/);
-  assert.match(hover({ ...SNAPSHOT, sevenDayReset: "not a date" }), /\| Weekly \| · \| \*\*18%\*\* \| · \| \? \|/);
+  assert.match(hover(SNAPSHOT, Date.parse("2026-01-01T02:13:00Z")), /\| \$\(watch\) Session \| · \| \*\*42%\*\* \| · \| now \|/);
+  assert.match(hover({ ...SNAPSHOT, fiveHourReset: null }), /\| \$\(watch\) Session \| · \| \*\*42%\*\* \| · \| \? \|/);
+  assert.match(hover({ ...SNAPSHOT, sevenDayReset: undefined }), /\| \$\(calendar\) Weekly \| · \| \*\*18%\*\* \| · \| \? \|/);
+  assert.match(hover({ ...SNAPSHOT, sevenDayReset: "not a date" }), /\| \$\(calendar\) Weekly \| · \| \*\*18%\*\* \| · \| \? \|/);
 });
 
 test("a reset time from the API cannot add anything to the hover but a duration, a question mark or now", () => {
@@ -141,14 +222,14 @@ test("noCreds says how to sign in, and shows no old reading", () => {
   const { text, markdown } = view({ status: "noCreds", snapshot: SNAPSHOT });
   assert.equal(text, "$(sparkle) no login");
   assert.match(markdown, /No Claude Code login found/);
-  assert.doesNotMatch(markdown, /\| Session \|/);
+  assert.doesNotMatch(markdown, /\| \$\(watch\) Session \|/);
 });
 
 test("expired explains the way out, names the setting and still shows the last reading", () => {
   const { text, markdown } = view({ status: "expired", snapshot: SNAPSHOT });
   assert.equal(text, "$(sparkle) !");
   assert.match(markdown, new RegExp(`${SETTINGS}\\.refreshExpiredToken`));
-  assert.match(markdown, /\| Session \|/);
+  assert.match(markdown, /\| \$\(watch\) Session \|/);
 });
 
 test("rateLimited shows a clock, the last reading, and that the extension retries by itself", () => {
@@ -156,7 +237,7 @@ test("rateLimited shows a clock, the last reading, and that the extension retrie
   const { text, markdown } = view(state);
   assert.equal(text, "$(clock) 42%");
   assert.match(markdown, /rate limiting requests\. The extension will retry automatically\./);
-  assert.match(markdown, /\| Session \|/);
+  assert.match(markdown, /\| \$\(watch\) Session \|/);
   assert.equal(view({ status: "rateLimited", retryAt: NOW + 1000 }).text, "$(clock) …", "no reading yet");
 });
 
@@ -177,8 +258,8 @@ test("the menu says Claude is rate limiting and that it retries by itself, betwe
   assert.deepEqual(
     entries.map((e) => e.label),
     [
-      "$(pulse) Session (5h)",
-      "$(pulse) Weekly (7d)",
+      "$(watch) Session (5h)",
+      "$(calendar) Weekly (7d)",
       "$(clock) Rate limited",
       "$(history) Last checked",
       "",
@@ -196,8 +277,8 @@ test("error shows the message and the last reading if there is one", () => {
   const withReading = view({ status: "error", error: "Usage fetch failed: HTTP 500", snapshot: SNAPSHOT });
   assert.equal(withReading.text, "$(sparkle) ✗");
   assert.match(withReading.markdown, /\$\(error\) Usage fetch failed: HTTP 500/);
-  assert.match(withReading.markdown, /\| Session \|/);
-  assert.doesNotMatch(view({ status: "error", error: "x" }).markdown, /\| Session \|/);
+  assert.match(withReading.markdown, /\| \$\(watch\) Session \|/);
+  assert.doesNotMatch(view({ status: "error", error: "x" }).markdown, /\| \$\(watch\) Session \|/);
 });
 
 test("an error message cannot inject Markdown or a command link into the tooltip", () => {
@@ -220,8 +301,8 @@ test("the menu lists both windows with bars and reset times, when they were chec
   assert.deepEqual(
     entries.map((e) => e.label),
     [
-      "$(pulse) Session (5h)",
-      "$(pulse) Weekly (7d)",
+      "$(watch) Session (5h)",
+      "$(calendar) Weekly (7d)",
       "$(history) Last checked",
       "",
       "$(refresh) Refresh Now",

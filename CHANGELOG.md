@@ -4,6 +4,17 @@ All notable changes to this extension are documented here, following
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-11-25
+
+### Added
+
+- A new setting, `claudeLimitsMeter.showResetTime`, to show how long until each window resets right after its usage in the status bar, for example `42% (2h 13m)`. Turn it on with `claudeLimitsMeter.showWeekly` for the fullest view straight from the status bar: both windows, each with its usage and its reset time. It is off by default, counts down once a minute by itself and takes effect right away.
+- Screen readers now read the status bar item as words: the usage of both windows and how long until each resets.
+
+### Changed
+
+- With `claudeLimitsMeter.showWeekly` on, the status bar marks the session with a watch icon and the week with a calendar icon instead of the `5h` and `7d` labels. The hover and the click menu mark their Session and Weekly rows with the same icons, and the menu still says `5h` and `7d` beside them, so you can tell which is which.
+
 ## [0.8.2] - 2026-11-23
 
 ### Changed
