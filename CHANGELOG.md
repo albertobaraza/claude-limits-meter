@@ -4,6 +4,12 @@ All notable changes to this extension are documented here, following
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.1] - 2026-11-27
+
+### Changed
+
+- With `claudeLimitsMeter.showWeekly` on, the status bar item drops the sparkle in front of the watch and calendar icons and reads `⌚ 42% · 📅 18%`, so it is shorter and less busy. With the setting off, and while there is no reading to show, the item still starts with the sparkle.
+
 ## [0.9.0] - 2026-11-25
 
 ### Added
