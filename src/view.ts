@@ -16,7 +16,8 @@ export const WARN_PCT = 90;
 export const USAGE_PAGE_URL = "https://claude.ai/settings/usage";
 
 /**
- * The codicons that stand for the two windows wherever VS Code draws them: in the status-bar text instead of "5h" and "7d", and
+ * The codicons that stand for the two windows wherever VS Code draws them: in the status-bar text instead of "5h" and "7d"
+ * (where they also take the place of the sparkle, so the text does not carry three icons), and
  * on the hover's and the menu's rows, so the menu's "Session (5h)" and "Weekly (7d)" say what they mean. Not `$(clock)`: that
  * is the rate limit's.
  */
@@ -166,7 +167,9 @@ export function statusView(
       body = `$(error) ${escapeMarkdown(state.error ?? "Unknown error")}`;
       break;
     case "ok":
-      text = `$(sparkle) ${usageText(s ?? {}, now, options)}`;
+      // With the week shown, its icons mark the item well enough, so the sparkle goes and the text has two icons, not three.
+      // The rate limit's clock stays: it says something the icons do not.
+      text = options.showWeekly ? usageText(s ?? {}, now, options) : `$(sparkle) ${usageText(s ?? {}, now, options)}`;
       body = "";
       break;
   }

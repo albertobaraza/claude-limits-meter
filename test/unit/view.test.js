@@ -38,12 +38,13 @@ test("ok shows the 5-hour percentage, truncated, in the status bar", () => {
   assert.equal(view({ status: "ok", snapshot: SNAPSHOT }).text, "$(sparkle) 42%");
 });
 
-test("showWeekly puts the 7-day week next to the 5-hour session in the status-bar text", () => {
+test("showWeekly puts the 7-day week next to the 5-hour session in the status-bar text, its icons in place of the sparkle", () => {
   const both = (state) => statusView(state, COMMANDS, NOW, { showWeekly: true });
-  assert.equal(both({ status: "ok", snapshot: SNAPSHOT }).text, "$(sparkle) $(watch) 42% · $(calendar) 18%");
+  assert.equal(both({ status: "ok", snapshot: SNAPSHOT }).text, "$(watch) 42% · $(calendar) 18%");
+  // The rate limit's clock is not the sparkle: it says the reading is held back, so it stays in front of the icons.
   assert.equal(both({ status: "rateLimited", snapshot: SNAPSHOT, retryAt: NOW + 1000 }).text, "$(clock) $(watch) 42% · $(calendar) 18%");
   assert.equal(both({ status: "rateLimited", retryAt: NOW + 1000 }).text, "$(clock) …", "no reading yet");
-  assert.equal(both({ status: "ok" }).text, "$(sparkle) $(watch) 0% · $(calendar) 0%");
+  assert.equal(both({ status: "ok" }).text, "$(watch) 0% · $(calendar) 0%");
   // The states that show a symbol instead of numbers are the same with the setting on.
   for (const status of ["loading", "noCreds", "expired", "error"]) {
     const state = { status, snapshot: SNAPSHOT, error: "x" };
@@ -59,8 +60,8 @@ test("showResetTime puts the time until each shown window resets after its usage
   const ok = { status: "ok", snapshot: SNAPSHOT };
   const text = (state, options, now = NOW) => statusView(state, COMMANDS, now, options).text;
   assert.equal(text(ok, { showResetTime: true }), "$(sparkle) 42% (2h 13m)");
-  assert.equal(text(ok, { showResetTime: true, showWeekly: true }), "$(sparkle) $(watch) 42% (2h 13m) · $(calendar) 18% (4d 2h)");
-  assert.equal(text(ok, { showResetTime: false, showWeekly: true }), "$(sparkle) $(watch) 42% · $(calendar) 18%", "the week alone");
+  assert.equal(text(ok, { showResetTime: true, showWeekly: true }), "$(watch) 42% (2h 13m) · $(calendar) 18% (4d 2h)");
+  assert.equal(text(ok, { showResetTime: false, showWeekly: true }), "$(watch) 42% · $(calendar) 18%", "the week alone");
   assert.equal(text(ok, { showResetTime: false }), "$(sparkle) 42%");
   // It counts down with the clock it is given (the extension re-renders once a minute), down to "now" once the reset has passed.
   assert.equal(text(ok, { showResetTime: true }, NOW + 2 * 60 * 60_000), "$(sparkle) 42% (13m)");
@@ -71,9 +72,9 @@ test("showResetTime puts the time until each shown window resets after its usage
   assert.equal(text({ status: "rateLimited", retryAt: NOW + 1000 }, { showResetTime: true }), "$(clock) …", "no reading yet");
   // A reset time missing or unreadable is left out of the bar (the hover says "?"), and so is a missing reading's.
   const noReset = { status: "ok", snapshot: { ...SNAPSHOT, fiveHourReset: null, sevenDayReset: "not a date" } };
-  assert.equal(text(noReset, { showResetTime: true, showWeekly: true }), "$(sparkle) $(watch) 42% · $(calendar) 18%");
+  assert.equal(text(noReset, { showResetTime: true, showWeekly: true }), "$(watch) 42% · $(calendar) 18%");
   assert.equal(text({ status: "ok", snapshot: { ...SNAPSHOT, fiveHourReset: undefined } }, { showResetTime: true }), "$(sparkle) 42%");
-  assert.equal(text({ status: "ok" }, { showResetTime: true, showWeekly: true }), "$(sparkle) $(watch) 0% · $(calendar) 0%");
+  assert.equal(text({ status: "ok" }, { showResetTime: true, showWeekly: true }), "$(watch) 0% · $(calendar) 0%");
   // The states that show a symbol instead of numbers, and the hover, are the same with the setting on.
   for (const status of ["loading", "noCreds", "expired", "error"]) {
     const state = { status, snapshot: SNAPSHOT, error: "x" };

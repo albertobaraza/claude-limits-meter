@@ -207,7 +207,7 @@ const checks = {
     };
     try {
       await cfg.update("showWeekly", true, vscode.ConfigurationTarget.Workspace);
-      assert.equal(await barText("$(sparkle) $(watch) 55% · $(calendar) 20% DEV"), "$(sparkle) $(watch) 55% · $(calendar) 20% DEV");
+      assert.equal(await barText("$(watch) 55% · $(calendar) 20% DEV"), "$(watch) 55% · $(calendar) 20% DEV");
     } finally {
       await cfg.update("showWeekly", undefined, vscode.ConfigurationTarget.Workspace);
     }
@@ -225,7 +225,7 @@ const checks = {
       await cfg.update("showResetTime", true, vscode.ConfigurationTarget.Workspace);
       assert.match(await barMatching(/^\$\(sparkle\) 55% \(1h 5\dm\) DEV$/), /^\$\(sparkle\) 55% \(1h 5\dm\) DEV$/);
       await cfg.update("showWeekly", true, vscode.ConfigurationTarget.Workspace);
-      const both = /^\$\(sparkle\) \$\(watch\) 55% \(1h 5\dm\) · \$\(calendar\) 20% \(2d 23h\) DEV$/;
+      const both = /^\$\(watch\) 55% \(1h 5\dm\) · \$\(calendar\) 20% \(2d 23h\) DEV$/;
       assert.match(await barMatching(both), both);
     } finally {
       await cfg.update("showResetTime", undefined, vscode.ConfigurationTarget.Workspace);
