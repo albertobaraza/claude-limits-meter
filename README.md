@@ -22,7 +22,7 @@ Hover the status bar item for both windows one above the other, with how much of
 
 | Status bar | Meaning |
 | --- | --- |
-| `✦ 42%` | Your 5-hour session usage. With `claudeLimitsMeter.showWeekly` on: `✦ ⌚ 42% · 📅 18%`, a watch icon for the session and a calendar for the week (the hover and the click menu mark their rows the same way). With `claudeLimitsMeter.showResetTime` on, each window is followed by the time until it resets: `✦ 42% (2h 13m)`, or with both on `✦ ⌚ 42% (2h 13m) · 📅 18% (4d 2h)`. |
+| `✦ 42%` | Your 5-hour session usage. With `claudeLimitsMeter.showWeekly` on: `⌚ 42% · 📅 18%`, a watch icon for the session and a calendar for the week in place of the sparkle (the hover and the click menu mark their rows the same way). With `claudeLimitsMeter.showResetTime` on, each window is followed by the time until it resets: `✦ 42% (2h 13m)`, or with both on `⌚ 42% (2h 13m) · 📅 18% (4d 2h)`. |
 | `✦ 91%` in yellow | The 5-hour session or the 7-day week (shown or not) has reached 90%. |
 | `🕒 42%` | Claude asked for a pause. The last reading is shown (`🕒 …` before the first one), and the extension retries by itself. |
 | `✦ !` | The stored Claude token has expired. It renews the next time you use Claude Code. |
